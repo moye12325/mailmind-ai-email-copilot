@@ -331,4 +331,4 @@ If you use Gmail API, OAuth scopes, email content processing, or third-party AI 
 
 ## License
 
-TBD.
+Apache-2.0 license
