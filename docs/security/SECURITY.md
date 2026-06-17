@@ -142,9 +142,10 @@ access_token 短期缓存至 Redis
 补充规则：
 
 1. Access Token Redis TTL 默认取 `expires_in - 300s`，若上游未返回则默认 3300 秒；
-2. 同一 `mailbox_id` 的 token refresh 必须使用分布式锁，避免并发刷新；
-3. 分布式锁可使用 Redis `SET key value NX EX 30`；
-4. 获取锁失败时，请求应等待已有刷新结果或返回可重试错误，不得并发刷新同一 Refresh Token。
+2. 同一 `mailbox_id` 的 token refresh 必须使用分布式锁，避免并发刷新导致 Refresh Token 失效；
+3. 锁值必须是**唯一请求 ID**（如 UUID）；
+4. 释放锁必须使用 Lua 脚本比对当前持有者是否与请求 ID 一致，一致才可 `DEL`，防止误删其他请求的锁；
+5. 获取锁失败时，退避 1 秒后重试获取缓存；若缓存仍未就绪，返回 `MAILBOX_REAUTH_REQUIRED` 错误。
 
 ---
 

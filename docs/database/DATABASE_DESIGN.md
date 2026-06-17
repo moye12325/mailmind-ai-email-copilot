@@ -398,6 +398,7 @@ detail_view
 | `imap_password_encrypted` | `TEXT` | NULL | IMAP 密码或应用专用密码，加密存储 |
 | `scopes_snapshot` | `TEXT[]` | NOT NULL DEFAULT `'{}'` | 授权时的 Scope 快照 |
 | `credentials_json` | `JSONB` | NOT NULL DEFAULT `'{}'::jsonb` | 额外 Provider 凭据信息，例如租户、授权端点标识 |
+| `encryption_key_version` | `VARCHAR(20)` | NULL | 用于标识加密密钥版本，便于未来密钥轮换 |
 | `created_at` | `TIMESTAMPTZ` | NOT NULL DEFAULT `NOW()` | 创建时间 |
 | `updated_at` | `TIMESTAMPTZ` | NOT NULL DEFAULT `NOW()` | 更新时间 |
 
@@ -744,13 +745,16 @@ AI 输出 `items[]` 中每个对象落一条 `digest_items`：
 
 ### 8.1 Digest 版本切换规则
 
-1. 生成新 Digest 时，先插入新行：`status = 'generating'`、`is_current = FALSE`。
-2. AI 成功后，先写入 `digest_items`，再在同一事务中：
+Digest 版本切换属于**强一致性操作**，必须满足：
+
+1. 生成新 Digest 时，先插入新行：`status = 'generating'`、`is_current = FALSE`；
+2. 事务隔离级别至少为 `REPEATABLE READ`；
+3. AI 成功后，先写入 `digest_items`，再在同一事务中：
    - 将旧当前版本 `is_current = FALSE`
    - 将新版本 `is_current = TRUE`
    - 将新版本 `status` 置为 `fresh` 或 `stale`
-3. 如果刷新中需要前端提示旧版本仍在使用，可将旧当前版本临时标记为 `refreshing`。
-4. 新版本失败时，仅将新版本标记为 `failed`，旧当前版本不变。
+4. **回滚策略**：如果插入 `digest_items` 失败或任何约束冲突，整个事务必须回滚，保留旧版本 `is_current = TRUE`，不得留下半成品版本；
+5. 前端读取当前版本时必须只读 `is_current = TRUE` 的行，避免读到中间状态。
 
 ### 8.2 Gmail 已读 / 未读同步规则
 

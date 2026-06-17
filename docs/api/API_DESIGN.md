@@ -80,7 +80,6 @@
   GET  /today                 获取当前用户今日日报
   POST /today/generate        手动触发生成今日日报
   POST /today/refresh         刷新日报
-  GET  /today/new-mails       获取日报生成后的新邮件列表
   GET  /{digest_id}           获取指定日报详情
 ```
 
@@ -175,3 +174,18 @@ source=current_digest|all
 * 标记完成。
 
 ---
+
+### 8 Users API
+
+```text
+/api/users
+  GET  /me                      获取当前用户配置
+  PATCH /me                     更新当前用户配置
+  PATCH /me/password            修改系统登录密码
+```
+
+补充规则：
+
+1. `PATCH /me` 支持更新 `users.timezone`（IANA 格式）、显示偏好等；
+2. 更新时区后，Digest 的日期窗口计算必须即时生效；
+3. 密码修改需要当前密码验证。

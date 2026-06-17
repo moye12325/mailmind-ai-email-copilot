@@ -129,7 +129,7 @@ class LLMClient:
           "title": { "type": "string", "minLength": 1 },
           "summary": { "type": ["string", "null"] },
           "category": { "type": ["string", "null"], "enum": ["work", "notification", "marketing", "social", "other", null] },
-          "suggested_action": { "type": ["string", "null"] },
+          "suggested_action": { "type": ["string", "null"], "enum": ["reply_today", "review_today", "handle_before_deadline", "ignore", "archive_candidate", "follow_up_later", "no_action_required", null] },
           "priority": { "type": "string", "enum": ["high", "medium", "low"] },
           "reason": { "type": ["string", "null"] },
           "deadline": { "type": ["string", "null"] },
