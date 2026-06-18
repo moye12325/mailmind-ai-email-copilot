@@ -1,4 +1,4 @@
-# AI Email Copilot 开发与部署设计
+# MailMind 开发与部署设计
 
 > 本文档由 `docs/architecture/SYSTEM_DESIGN.md` 拆分而来，作为该专题的详细设计文档。
 > 系统级背景、设计目标和模块关系请先阅读 `../architecture/SYSTEM_DESIGN.md`。
@@ -35,10 +35,10 @@ Worker + Beat       → 本机 celery
 
 ---
 
-### 3 目录结构
+### 3 MVP 目录结构
 
 ```text
-ai-email-copilot/
+mailmind-ai-email-copilot/
   frontend/
     src/
       app/
@@ -77,8 +77,6 @@ ai-email-copilot/
       providers/
         base.py
         gmail.py
-        outlook.py
-        imap.py
 
       services/
         auth_service.py
@@ -116,6 +114,15 @@ ai-email-copilot/
         email_parser.py
         logger.py
 
+    tests/
+      test_auth.py
+      test_encryption.py
+      test_gmail_oauth.py
+      test_email_sync.py
+      test_digest_versioning.py
+      test_ai_output_parser.py
+      test_user_actions.py
+
     requirements.txt
 
   docker/
@@ -138,9 +145,65 @@ ai-email-copilot/
   README.md
 ```
 
+Tests should be added incrementally with backend tasks when the task changes testable behavior. `backend/tests/` is not reserved for a final-only testing phase.
+
+MVP provider files:
+
+```text
+providers/
+  base.py
+  gmail.py
+```
+
+Future reserved provider files:
+
+```text
+providers/
+  outlook.py
+  imap.py
+```
+
+Do not create `outlook.py` or `imap.py` during MVP scaffold unless a specific future-reserved task explicitly asks for placeholder files.
+
 ---
 
-### 4 docker-compose.yml 示意
+### 4 Docker Compose stages
+
+T003 local infrastructure compose must include only:
+
+```text
+postgres
+redis
+```
+
+T003 must not containerize backend, frontend, worker, or beat. Those services belong to a future full-stack compose stage after the local development path is stable.
+
+Future full-stack compose may include:
+
+```text
+backend
+frontend
+worker
+beat
+```
+
+### 4.1 T003 local infrastructure docker-compose.yml示意
+
+```yaml
+services:
+  postgres:
+    image: postgres:15
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    env_file: .env
+
+  redis:
+    image: redis:7
+    volumes:
+      - ./data/redis:/data
+```
+
+### 4.2 Future full-stack docker-compose.yml示意
 
 ```yaml
 services:

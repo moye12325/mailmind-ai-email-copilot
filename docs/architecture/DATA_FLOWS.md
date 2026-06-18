@@ -1,4 +1,4 @@
-# AI Email Copilot 核心数据流
+# MailMind 核心数据流
 
 > 本文档由 `docs/architecture/SYSTEM_DESIGN.md` 拆分而来，作为该专题的详细设计文档。
 > 系统级背景、设计目标和模块关系请先阅读 `../architecture/SYSTEM_DESIGN.md`。
@@ -66,9 +66,11 @@ sync_today_emails(mailbox_id)
         ↓
 必要时刷新 access_token
         ↓
-计算用户本地时区的当天时间范围
+业务层根据 users.timezone 计算 digest_date 的本地时间窗口
         ↓
-调用 GmailProvider.list_today_messages()
+将本地窗口转换为 UTC window_start / window_end
+        ↓
+调用 GmailProvider.list_messages_for_window(mailbox, window_start, window_end)
         ↓
 批量获取邮件详情
         ↓
@@ -83,6 +85,14 @@ EmailPreprocessor 清洗正文
 更新 sync_jobs
 ```
 
+窗口规则：
+
+1. 业务层根据 `users.timezone` 计算 `digest_date` 的本地自然日窗口；
+2. 业务层将本地窗口转换为 UTC `window_start` / `window_end`；
+3. Provider 只接收 `window_start` / `window_end`，不负责判断“今天”；
+4. Provider 返回候选邮件后，本地再根据 `received_at` 做二次过滤；
+5. 不使用 Provider 侧“今日”快捷方法。
+
 ---
 
 ### 4 Daily Digest 生成流程
@@ -94,7 +104,7 @@ EmailPreprocessor 清洗正文
         ↓
 查询今日已同步邮件
         ↓
-创建 daily_digests 新版本，status = generating
+创建 daily_digests 新版本，status = generating，is_current = false
         ↓
 创建 ai_runs，status = running
         ↓
@@ -110,12 +120,27 @@ DigestDecisionEngine 生成 digest_items
         ↓
 写入 digest_items
         ↓
-将新 daily_digest 标记为 is_current = true
+开启事务
         ↓
-将旧版本 is_current = false
+锁定同一 mailbox_id + digest_date 下的旧 current digest
+        ↓
+将旧 current digest 的 is_current 设置为 false
+        ↓
+将新 digest 的 is_current 设置为 true，并更新 status / generated_at
+        ↓
+提交事务
         ↓
 任务完成
 ```
+
+Digest current 切换规则：
+
+1. 旧版本 `is_current = false` 和新版本 `is_current = true` 必须在同一事务中完成；
+2. 如果任一步失败，事务必须回滚；
+3. 回滚后旧版本仍然保持 current；
+4. 不允许出现同一 `mailbox_id + digest_date` 下两个 current digest；
+5. 不允许先设置新版本 current 再取消旧版本 current；
+6. 新版本只有在 `digest_items` 安全写入后才允许切换为 current。
 
 失败时：
 

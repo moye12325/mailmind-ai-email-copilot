@@ -2,6 +2,14 @@
 
 This document records architecture decisions that should not be revisited casually during implementation. New decisions should be added as ADR entries instead of silently changing source documents or implementation behavior.
 
+## ADR-000 Official product name is MailMind
+
+**Status:** Accepted
+**Context:** Earlier documents used AI Email Copilot as a working name, product type, and title interchangeably.
+**Decision:** The official product name is MailMind. AI Email Copilot is the product type, subtitle, or historical working description. The repository name remains `mailmind-ai-email-copilot`.
+**Consequences:** Product documents, task descriptions, and user-facing references should use MailMind as the product name. AI Email Copilot may still describe the category or product type.
+**Related Docs:** `README.md`, `docs/README.md`, `docs/product/PRD.md`
+
 ## ADR-001 Daily Digest is the product homepage
 
 **Status:** Accepted
@@ -26,12 +34,12 @@ This document records architecture decisions that should not be revisited casual
 **Consequences:** Mark-read and mark-unread operations must check scope and permission mode before calling Gmail.
 **Related Docs:** `docs/security/SECURITY.md`, `docs/api/API_DESIGN.md`, `docs/database/DATABASE_DESIGN.md`
 
-## ADR-004 gmail.modify is a self-use full-experience scope, not minimal permission
+## ADR-004 gmail.modify is a self-use full-experience scope, not minimal read-only permission
 
-**Status:** Accepted with product-doc wording to review
+**Status:** Accepted
 **Context:** `gmail.modify` is required for the desired self-use read/unread experience, but it is broader than read-only access and may trigger stricter Google review for public use.
 **Decision:** MVP uses `gmail.readonly + gmail.modify` as a self-use full-experience permission set.
-**Consequences:** Public/SaaS distribution must reassess Google verification and security review. Product copy that describes this as minimum permission should be reviewed.
+**Consequences:** Public/SaaS distribution must reassess Google verification, security review, and permission minimization strategy. Product copy must not describe this scope set as strict read-only minimum permission.
 **Related Docs:** `docs/security/SECURITY.md`, `docs/architecture/SYSTEM_DESIGN.md`, `docs/product/PRD.md`
 
 ## ADR-005 Daily Digest must be versioned
@@ -106,6 +114,22 @@ This document records architecture decisions that should not be revisited casual
 **Consequences:** Store timestamps as UTC `TIMESTAMPTZ`; compute business windows using IANA timezone strings.
 **Related Docs:** `docs/engineering/TIMEZONE_RULES.md`, `docs/database/DATABASE_DESIGN.md`
 
+## ADR-013A Provider adapters receive explicit UTC windows and do not define today
+
+**Status:** Accepted
+**Context:** Provider-specific methods should not decide what “today” means because business windows depend on `users.timezone` and must be consistent across providers.
+**Decision:** Business services calculate the local Digest window from `users.timezone`, convert it to UTC `window_start` / `window_end`, and call `list_messages_for_window(mailbox, window_start, window_end)`. Provider adapters do not decide “today” on their own.
+**Consequences:** Gmail, and future providers, receive explicit UTC windows and return candidate messages. Business services perform local `received_at` filtering for boundary correctness.
+**Related Docs:** `docs/architecture/SYSTEM_DESIGN.md`, `docs/architecture/DATA_FLOWS.md`, `docs/engineering/TIMEZONE_RULES.md`
+
+## ADR-013B Digest current switching must unset old current before setting new current in one transaction
+
+**Status:** Accepted
+**Context:** `daily_digests` enforces one current version per `mailbox_id + digest_date`. Setting the new version current before unsetting the old current can violate the partial unique index.
+**Decision:** Digest current switching must occur in one transaction after `digest_items` are written. The old current version is set to `is_current = false` before the new version is set to `is_current = true`.
+**Consequences:** If any step fails, the transaction rolls back and the old current Digest remains current. Implementations must not expose two current Digests or half-built versions.
+**Related Docs:** `docs/database/DATABASE_DESIGN.md`, `docs/architecture/DATA_FLOWS.md`
+
 ## ADR-014 MVP uses .env AI provider; V1 reserves AI Provider configuration
 
 **Status:** Accepted
@@ -137,3 +161,11 @@ This document records architecture decisions that should not be revisited casual
 **Decision:** MVP does not request `gmail.send` and does not send email.
 **Consequences:** The UI may open Gmail or mark read/unread, but must not send or auto-reply.
 **Related Docs:** `docs/product/PRD.md`, `docs/security/SECURITY.md`, `docs/api/API_DESIGN.md`
+
+## ADR-018 Task IDs are stable identifiers, not strict execution order
+
+**Status:** Accepted
+**Context:** Harness tasks are intentionally stable, but some dependencies point to later-numbered tasks or later phases.
+**Decision:** Task IDs must remain stable identifiers. Execution order is governed by task dependencies and the Execution Batches section in `TASK_BREAKDOWN.md`.
+**Consequences:** Codex must not assume numeric order is sufficient. If dependencies and batches conflict, Codex must stop and request design review rather than silently reordering implementation work.
+**Related Docs:** `docs/engineering/TASK_BREAKDOWN.md`, `docs/engineering/AGENTS.md`

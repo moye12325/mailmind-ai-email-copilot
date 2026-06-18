@@ -2,6 +2,10 @@
 
 **MailMind** is a local-first AI email copilot designed to help users understand and process daily emails more efficiently.
 
+Official product name: **MailMind**  
+Product type / subtitle: **AI Email Copilot**  
+Repository name: `mailmind-ai-email-copilot`
+
 Instead of acting as a traditional inbox client, MailMind focuses on generating an actionable **Daily Digest** from Gmail emails. It analyzes the emails received during the day, identifies what needs attention, and organizes them into a decision-oriented dashboard.
 
 ## Overview
@@ -240,14 +244,14 @@ Key principles:
 
 ## Gmail Permissions
 
-The MVP may use the following Gmail API scopes:
+The MVP uses the following self-use full-experience Gmail API scopes:
 
 | Scope            | Purpose                                     |
 | ---------------- | ------------------------------------------- |
 | `gmail.readonly` | Read email list, metadata, and body content |
 | `gmail.modify`   | Modify read / unread status                 |
 
-The `gmail.modify` scope is a restricted Gmail scope. It is acceptable for local personal testing, but public distribution or SaaS usage may require additional Google verification and security review.
+The `gmail.modify` scope enables real Gmail read / unread synchronization. It is not a strict read-only minimum-permission scope. It is acceptable for local personal testing, but public distribution or SaaS usage may require additional Google verification, security review, and permission-minimization reassessment.
 
 ## Development Status
 

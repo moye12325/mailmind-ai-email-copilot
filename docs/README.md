@@ -1,6 +1,10 @@
-# Documentation
+# MailMind Documentation
 
-AI Email Copilot 文档入口。
+MailMind 文档入口。
+
+正式产品名：MailMind  
+产品类型 / 副标题：AI Email Copilot  
+仓库名：`mailmind-ai-email-copilot`
 
 ## 推荐阅读顺序
 

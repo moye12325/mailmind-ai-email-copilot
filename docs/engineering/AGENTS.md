@@ -76,11 +76,33 @@ If Codex finds a conflict:
 4. Add or update a design-review issue if GitHub issue work is in scope for the task.
 5. Do not change code or architecture until the decision is made.
 
-Known issue to preserve until resolved:
+## 6. Design Review Workflow
 
-- `docs/product/PRD.md` describes `gmail.modify` in a minimum-permission context, while `docs/security/SECURITY.md` and `docs/architecture/SYSTEM_DESIGN.md` define `gmail.modify` as part of a self-use full-experience permission set. Implementation should follow the security/system design wording unless product docs are updated.
+When Codex finds that a task requires changing product scope, database design, API contract, AI Schema, security rules, or task boundaries, Codex must follow this workflow:
 
-## 6. Completion Report Format
+1. Stop the current implementation work.
+2. Record a design-review issue.
+3. The issue must include affected docs, proposed change, reason, risk, alternatives, and required decision.
+4. The approver is the repository owner or project maintainer.
+5. Before explicit approval, Codex must not continue implementing the related change.
+6. After approval, Codex must update the corresponding design documents before continuing implementation.
+7. If the change is rejected, Codex must continue to follow the existing documents.
+8. Design review is not authorization for Codex to change architecture on its own.
+
+## 7. Handling Documentation Gaps
+
+If Codex finds a documentation gap rather than a conflict, such as an undefined API error code, missing Allowed Files entry, missing database index detail, unclear security boundary, or missing frontend state definition, Codex must follow this workflow:
+
+1. Do not silently invent behavior.
+2. First check lower-priority documents for relevant context.
+3. If the behavior is still unclear, stop implementation for that part.
+4. Mark the issue as a Documentation Gap in the completion report.
+5. Create a design-review issue when the gap affects product scope, architecture, database, API, AI Schema, security, or task boundaries.
+6. Offer one to three concrete options when useful.
+7. Do not implement the missing behavior before repository owner or project maintainer approval.
+8. If the gap does not affect the current task's core path, bypass that part and record it as a deferred item.
+
+## 8. Completion Report Format
 
 Codex must output this report after every task:
 

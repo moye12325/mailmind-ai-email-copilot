@@ -98,6 +98,20 @@ Use this checklist to review Codex-generated changes and human PRs. Findings sho
 - Tests cover frontend fallback states.
 - Test failures are not hidden or weakened by changing product behavior.
 
+## Automated Validation Gates
+
+Future CI should include at least these gates:
+
+- Backend tests.
+- Backend lint.
+- Frontend typecheck.
+- Frontend lint.
+- Database migration validation.
+- Secret scanning.
+- Documentation consistency checks.
+
+Before CI exists, Codex must report which checks could not be run and why. After CI exists, PRs should not be considered complete until required checks pass or failures are explicitly explained.
+
 ## Harness Compliance Review
 
 - Task ID exists.

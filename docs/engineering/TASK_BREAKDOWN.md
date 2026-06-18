@@ -12,6 +12,73 @@ This document breaks the MailMind MVP into Codex-executable engineering tasks. I
 - If a required source document conflicts with another source document, stop and report the conflict.
 - Dependencies override the visual phase order. If a task depends on a later-numbered task, complete the dependency first or open a design-review issue to reorder the task graph.
 
+## MVP Definition of Done
+
+The MVP is done only when all of the following are true:
+
+1. Users can register, log in, and log out.
+2. Sessions use HttpOnly cookies.
+3. Users can connect Gmail.
+4. Gmail `refresh_token` is encrypted at rest.
+5. The system can synchronize today's Gmail messages.
+6. The system calculates Daily Digest windows from `users.timezone`.
+7. The system can generate a Daily Digest.
+8. Daily Digest is versioned and does not overwrite old versions.
+9. `digest_items` covers `urgent`, `review`, `ignore`, `todo`, and `risk` sections.
+10. `ai_runs` records AI calls and raw structured output.
+11. `user_actions` records actual user behavior.
+12. Email detail can be viewed.
+13. New-mail detection is available.
+14. `mark-read` / `mark-unread` syncs real Gmail state and updates local state only after Provider success.
+15. AI failure has a fallback path.
+16. Tokens, API keys, email body text, and full prompts do not enter logs.
+17. Backend tests pass.
+18. Frontend typecheck and lint pass.
+19. MVP does not include Outlook or IMAP runtime support.
+20. MVP does not include AI Provider UI.
+21. MVP does not include automatic email sending.
+22. MVP does not include non-MVP features.
+
+## Execution Batches
+
+Task ID is a stable identifier and must not be used as the only execution order. Dependencies override both task ID order and phase order. When executing multiple tasks, Codex must follow these batches unless a task dependency or approved design-review issue requires a different order.
+
+| Batch | Purpose | Tasks |
+|---|---|---|
+| Batch 0 | Documentation hardening | T000 |
+| Batch 1 | Repository scaffold | T001, T002, T003 |
+| Batch 2 | Backend and frontend foundation | T004, T005, T006, T007 |
+| Batch 3 | Identity foundation | T008, T009, T010 |
+| Batch 4 | Mailbox and credential foundation | T011, T012, T013, T014 |
+| Batch 5 | Provider and email synchronization | T015, T016, T017, T018 |
+| Batch 6 | Digest and AI foundation | T019, T020, T021, T022, T023, T024, T025, T026 |
+| Batch 7 | Job tracking and refresh dependencies | T034, T035 |
+| Batch 8 | Digest APIs and email APIs | T027, T028, T029, T030, T031 |
+| Batch 9 | Gmail write sync and user actions | T033, T032 |
+| Batch 10 | Async worker | T036 |
+| Batch 11 | Frontend MVP | T037, T038, T039, T040, T041 |
+| Batch 12 | Quality and acceptance | T042, T043, T044, T045 |
+
+Notes:
+
+- T032 depends on T033, so T033 is listed before T032 inside Batch 9.
+- T027 and T028 depend on T034/T035, so job tracking and new-mail cache work must land before those Digest API endpoints.
+- Existing phase headings remain useful for product grouping, but Execution Batches are the preferred multi-task execution guide.
+
+## Automated Validation Gates
+
+Future CI should include at least these validation gates:
+
+1. Backend tests.
+2. Backend lint.
+3. Frontend typecheck.
+4. Frontend lint.
+5. Database migration validation.
+6. Secret scanning.
+7. Documentation consistency checks.
+
+Before CI exists, Codex must report which checks could not be run and why. After CI exists, PRs should not be considered complete until required checks pass or failures are explicitly explained.
+
 ## Completion Report Format
 
 Every task completion report must use this format:
