@@ -307,7 +307,8 @@ p {
 .mm-main {
   padding: var(--space-page) calc(var(--space-page) + 4px) 64px;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1440px;
+  margin-inline: auto;
 }
 
 .mm-brand-name {
@@ -651,11 +652,25 @@ p {
 
 .mm-seg {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 3px;
   border: var(--border-w) solid var(--color-border);
   background: var(--color-surface-muted);
   border-radius: var(--radius-pill);
+  max-width: 100%;
+}
+
+.mm-seg--block {
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.mm-seg--block .mm-seg-btn {
+  flex: 1 1 0;
+  padding-inline: 6px;
+  text-align: center;
 }
 
 .mm-seg-btn {
@@ -669,6 +684,7 @@ p {
   padding: 5px 12px;
   border-radius: var(--radius-pill);
   cursor: pointer;
+  white-space: nowrap;
   transition: background var(--mm-transition), color var(--mm-transition);
 }
 
