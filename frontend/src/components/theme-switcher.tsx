@@ -52,8 +52,11 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="mm-stack" style={{ gap: 10, alignItems: "flex-start" }}>
-      <div className="mm-stack" style={{ gap: 6, alignItems: "flex-start" }}>
+    <div
+      className="mm-stack"
+      style={{ gap: 10, alignItems: "stretch", width: "100%" }}
+    >
+      <div className="mm-stack" style={{ gap: 6, alignItems: "stretch" }}>
         <span className="mm-nav-label" style={{ marginBottom: 0 }}>
           Style
         </span>
@@ -62,9 +65,10 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
           value={preset}
           options={PRESET_OPTIONS}
           onChange={setPreset}
+          block
         />
       </div>
-      <div className="mm-stack" style={{ gap: 6, alignItems: "flex-start" }}>
+      <div className="mm-stack" style={{ gap: 6, alignItems: "stretch" }}>
         <span className="mm-nav-label" style={{ marginBottom: 0 }}>
           Mode
         </span>
@@ -73,6 +77,7 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
           value={mode}
           options={MODE_OPTIONS}
           onChange={setMode}
+          block
         />
       </div>
     </div>

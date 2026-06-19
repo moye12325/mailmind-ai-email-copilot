@@ -22,14 +22,20 @@ export function SegmentedControl<T extends string>({
   value,
   options,
   onChange,
+  block = false,
 }: {
   label: string;
   value: T;
   options: SegmentedOption<T>[];
   onChange: (value: T) => void;
+  block?: boolean;
 }) {
   return (
-    <div className="mm-seg" role="group" aria-label={label}>
+    <div
+      className={block ? "mm-seg mm-seg--block" : "mm-seg"}
+      role="group"
+      aria-label={label}
+    >
       {options.map((opt) => {
         const active = opt.value === value;
         return (
