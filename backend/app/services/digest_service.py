@@ -212,6 +212,8 @@ def _generate_digest(
             mailbox_id=mailbox.id,
             digest_id=digest.id,
             trigger_source=trigger_source,
+            provider_id=getattr(provider, "provider_id", None),
+            provider_type=getattr(provider, "provider_type", None),
             model_provider=provider.provider_name,
             model_name=provider.model_name,
             prompt_version=prompt.prompt_version,
@@ -224,6 +226,10 @@ def _generate_digest(
         started = time.perf_counter()
         response = provider.generate_digest(prompt.text)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
+        ai_run.provider_id = response.provider_id or ai_run.provider_id
+        ai_run.provider_type = response.provider_type or ai_run.provider_type
+        ai_run.model_provider = response.model_provider
+        ai_run.model_name = response.model_name
         parsed = parse_digest_output(
             response.text,
             {email.external_id: email for email in emails},

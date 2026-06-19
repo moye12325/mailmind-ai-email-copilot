@@ -74,6 +74,8 @@ def _create_user_mailbox_and_email(
 
 
 class StaticProvider(LLMProvider):
+    provider_id = "mock"
+    provider_type = "mock"
     provider_name = "mock"
     model_name = "mock-digest-v1"
 
@@ -106,6 +108,8 @@ class StaticProvider(LLMProvider):
             ),
             model_provider=self.provider_name,
             model_name=self.model_name,
+            provider_id=self.provider_id,
+            provider_type=self.provider_type,
             prompt_tokens=10,
             completion_tokens=20,
             latency_ms=7,
@@ -113,6 +117,8 @@ class StaticProvider(LLMProvider):
 
 
 class FailingProvider(LLMProvider):
+    provider_id = "mock"
+    provider_type = "mock"
     provider_name = "mock"
     model_name = "mock-digest-v1"
 
@@ -152,6 +158,10 @@ def test_generate_today_digest_creates_digest_items_ai_run_and_sync_job() -> Non
         assert item.priority == "high"
         assert ai_run is not None
         assert ai_run.status == "succeeded"
+        assert ai_run.provider_id == "mock"
+        assert ai_run.provider_type == "mock"
+        assert ai_run.model_provider == "mock"
+        assert ai_run.model_name == "mock-digest-v1"
         assert job is not None
         assert job.job_type == "generate_daily_digest"
         assert job.status == "succeeded"
