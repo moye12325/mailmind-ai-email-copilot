@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -12,7 +13,7 @@ from app.db.models.mailbox_credential import MailboxCredential
 from app.db.models.sync_job import SyncJob
 from app.db.session import SessionLocal
 from app.main import app
-from app.providers.base import ProviderEmailMessage
+from app.providers.base import ProviderEmailMessage, ProviderError
 from app.services.credential_encryption_service import CredentialEncryptionService
 
 
@@ -30,7 +31,7 @@ def _register_client(prefix: str) -> tuple[TestClient, UUID]:
     return client, UUID(response.json()["data"]["user"]["id"])
 
 
-def _create_connected_mailbox(user_id: UUID) -> UUID:
+def _create_connected_mailbox(user_id: UUID, *, status: str = "active") -> UUID:
     with SessionLocal() as db:
         mailbox = Mailbox(
             user_id=user_id,
@@ -39,7 +40,7 @@ def _create_connected_mailbox(user_id: UUID) -> UUID:
             email_address=_email("sync-api-mailbox"),
             permission_mode="write_enabled",
             granted_scopes=["https://www.googleapis.com/auth/gmail.modify"],
-            status="active",
+            status=status,
         )
         db.add(mailbox)
         db.flush()
@@ -93,6 +94,21 @@ class FakeProvider:
         ]
 
 
+class FailingProvider:
+    def refresh_access_token(self, refresh_token: str) -> str:
+        assert refresh_token == "fake-refresh-token"
+        return "fake-access-token"
+
+    def list_messages_for_window(
+        self,
+        access_token: str,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[ProviderEmailMessage]:
+        raise ProviderError("PROVIDER_SYNC_FAILED", "Gmail request failed.", 502)
+
+
 def test_trigger_mailbox_sync_runs_sync_and_returns_job(monkeypatch) -> None:
     client, user_id = _register_client("mailbox-sync-api")
     mailbox_id = _create_connected_mailbox(user_id)
@@ -115,6 +131,47 @@ def test_trigger_mailbox_sync_runs_sync_and_returns_job(monkeypatch) -> None:
         assert job.status == "succeeded"
 
 
+def test_trigger_mailbox_sync_calls_email_sync_service(monkeypatch) -> None:
+    client, user_id = _register_client("mailbox-sync-wiring")
+    mailbox_id = _create_connected_mailbox(user_id)
+    job_id = uuid4()
+    calls: list[dict[str, object]] = []
+
+    @dataclass(slots=True)
+    class Result:
+        mailbox_id: UUID
+        status: str
+        synced_count: int
+        job_id: UUID
+
+    def fake_sync_today_emails(db, *, user_id, mailbox_id):
+        calls.append({"user_id": user_id, "mailbox_id": mailbox_id})
+        return Result(
+            mailbox_id=mailbox_id,
+            status="completed",
+            synced_count=3,
+            job_id=job_id,
+        )
+
+    monkeypatch.setattr(
+        "app.services.email_sync_service.sync_today_emails",
+        fake_sync_today_emails,
+    )
+
+    response = client.post(f"/api/mailboxes/{mailbox_id}/sync")
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body == {
+        "mailbox_id": str(mailbox_id),
+        "status": "completed",
+        "synced_count": 3,
+        "job_id": str(job_id),
+    }
+    assert calls == [{"user_id": user_id, "mailbox_id": mailbox_id}]
+    assert "not implemented" not in response.text.lower()
+
+
 def test_sync_status_returns_latest_sync_job(monkeypatch) -> None:
     client, user_id = _register_client("mailbox-sync-status-api")
     mailbox_id = _create_connected_mailbox(user_id)
@@ -133,3 +190,53 @@ def test_sync_status_returns_latest_sync_job(monkeypatch) -> None:
     assert body["last_job"]["id"] == job_id
     assert body["last_job"]["job_type"] == "sync_today_emails"
     assert body["last_job"]["status"] == "completed"
+
+
+def test_trigger_mailbox_sync_blocks_other_users_mailbox() -> None:
+    client, _ = _register_client("mailbox-sync-current-user")
+    _, other_user_id = _register_client("mailbox-sync-other-user")
+    other_mailbox_id = _create_connected_mailbox(other_user_id)
+
+    response = client.post(f"/api/mailboxes/{other_mailbox_id}/sync")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_trigger_mailbox_sync_rejects_disconnected_mailbox() -> None:
+    client, user_id = _register_client("mailbox-sync-disconnected")
+    mailbox_id = _create_connected_mailbox(user_id, status="disconnected")
+
+    response = client.post(f"/api/mailboxes/{mailbox_id}/sync")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "MAILBOX_REAUTH_REQUIRED"
+    assert "not implemented" not in response.text.lower()
+
+
+def test_trigger_mailbox_sync_returns_provider_error_and_records_failed_job(
+    monkeypatch,
+) -> None:
+    client, user_id = _register_client("mailbox-sync-provider-fail")
+    mailbox_id = _create_connected_mailbox(user_id)
+    monkeypatch.setattr(
+        "app.services.email_sync_service.GmailProvider",
+        lambda: FailingProvider(),
+    )
+
+    response = client.post(f"/api/mailboxes/{mailbox_id}/sync")
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "PROVIDER_SYNC_FAILED"
+    assert "not implemented" not in response.text.lower()
+
+    with SessionLocal() as db:
+        job = db.scalar(
+            select(SyncJob)
+            .where(SyncJob.mailbox_id == mailbox_id, SyncJob.user_id == user_id)
+            .order_by(SyncJob.created_at.desc())
+        )
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error_code == "PROVIDER_SYNC_FAILED"
+        assert job.error_message == "Gmail request failed."

@@ -10,7 +10,8 @@ from app.db.models.sync_job import SyncJob
 from app.db.models.user import User
 from app.schemas.mailbox import mailbox_payload
 from app.schemas.sync_job import sync_job_payload, sync_status_for_api
-from app.services.email_sync_service import EmailSyncError, sync_today_emails
+from app.services import email_sync_service
+from app.services.email_sync_service import EmailSyncError
 
 
 router = APIRouter(prefix="/api/mailboxes", tags=["mailboxes"])
@@ -89,7 +90,7 @@ def trigger_sync(
 ) -> dict[str, object]:
     mailbox = _get_owned_mailbox(db, user=current_user, mailbox_id=mailbox_id)
     try:
-        result = sync_today_emails(
+        result = email_sync_service.sync_today_emails(
             db,
             user_id=current_user.id,
             mailbox_id=mailbox.id,

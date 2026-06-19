@@ -114,7 +114,6 @@ export type MailboxSyncState =
   | "running"
   | "completed"
   | "failed"
-  | "not_implemented"
   | "unknown"
   | string;
 
