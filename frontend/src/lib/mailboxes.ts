@@ -51,8 +51,6 @@ export function syncStatusTone(status: MailboxSyncState | undefined): BadgeTone 
       return "info";
     case "failed":
       return "danger";
-    case "not_implemented":
-      return "warn";
     case "not_started":
       return "neutral";
     default:
