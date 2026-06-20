@@ -49,6 +49,8 @@ def test_ai_run_service_records_metadata_without_prompt_or_body() -> None:
             mailbox_id=mailbox.id,
             digest_id=None,
             trigger_source="manual",
+            provider_id="primary",
+            provider_type="openai_compatible",
             model_provider="mock",
             model_name="mock-digest-v1",
             prompt_version="digest_prompt.v1",
@@ -72,6 +74,8 @@ def test_ai_run_service_records_metadata_without_prompt_or_body() -> None:
         stored = db.get(AIRun, run_id)
         assert stored is not None
         assert stored.status == "succeeded"
+        assert stored.provider_id == "primary"
+        assert stored.provider_type == "openai_compatible"
         assert stored.input_hash
         assert stored.input_summary_json == {"mail_count": 1}
         assert stored.output_json["overview"]["summary"] == "Done"
@@ -90,6 +94,8 @@ def test_ai_run_service_records_failed_run() -> None:
             mailbox_id=mailbox.id,
             digest_id=None,
             trigger_source="manual",
+            provider_id="primary",
+            provider_type="openai_compatible",
             model_provider="mock",
             model_name="mock-digest-v1",
             prompt_version="digest_prompt.v1",
