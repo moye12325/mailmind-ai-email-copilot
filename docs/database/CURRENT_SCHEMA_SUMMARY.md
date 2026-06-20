@@ -56,21 +56,27 @@ Structured digest rows generated from AI output. Stores email/todo/risk item typ
 
 AI execution audit table. Stores run type, provider/model metadata, prompt/schema versions, input hash and summary, structured output JSON, status, errors, token counts, and timing.
 
+v0.2 adds nullable `provider_id` and `provider_type` columns so digest AI runs
+record which configured provider profile handled the run.
+
 ### `user_actions`
 
 User operation audit table. Stores actions against mailboxes, digests, digest items, and emails, including provider effect, before/after state JSON, status, and errors.
 
 ## Migration Notes
 
-- There is a linear migration history through `20260619_0006`.
+- There is a linear migration history through `20260620_0007`.
 - Migration `20260619_0004` removes the early `sync_jobs.digest_id` digest scope.
 - Migration `20260619_0005` creates `daily_digests`, `digest_items`, and `ai_runs`, then re-adds `sync_jobs.digest_id` with a foreign key to `daily_digests`.
+- Migration `20260620_0007` adds `ai_runs.provider_id` and `ai_runs.provider_type`.
 - This resolves the half-built digest schema concern in the current head.
 - `sync_jobs.digest_id`, when present at head, points to `daily_digests.id`.
 
 ## Current Limitations
 
-- The database has v0.1 tables for digest and AI audit, but the product still uses a mock AI provider.
+- The database has digest and AI audit tables with v0.2 provider metadata. Real
+  provider values must come from environment configuration outside Git; the mock
+  provider remains available as fallback.
 - `sync_jobs` records synchronous service work in v0.1; Celery task execution is not implemented.
 - The schema is local-MVP oriented and has not been hardened for production multi-tenant SaaS operation.
 
