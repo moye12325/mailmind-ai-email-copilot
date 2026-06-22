@@ -14,6 +14,7 @@ import {
   MailboxSyncCard,
   type MailboxSyncStatusView,
 } from "@/components/mailbox-sync-card";
+import { useJobPolling } from "@/components/jobs/use-job-polling";
 import { useAuth } from "@/lib/auth";
 import {
   ApiRequestError,
@@ -22,8 +23,9 @@ import {
   listMailboxes,
   startGmailLogin,
   triggerMailboxSync,
+  triggerMailboxSyncJob,
 } from "@/lib/api-client";
-import type { Mailbox } from "@/lib/api-types";
+import type { Job, Mailbox } from "@/lib/api-types";
 import {
   formatDateTimeWithRelative,
   mailboxStateMessage,
@@ -164,6 +166,7 @@ export default function MailboxSettingsPage() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [syncingMailboxId, setSyncingMailboxId] = useState<string | null>(null);
+  const [activeSyncJob, setActiveSyncJob] = useState<Job | null>(null);
 
   const refreshSyncStatuses = useCallback(async (nextMailboxes: Mailbox[]) => {
     if (nextMailboxes.length === 0) {
@@ -219,6 +222,25 @@ export default function MailboxSettingsPage() {
       return false;
     }
   }, [refreshSyncStatuses, t]);
+
+  const onSyncJobCompleted = useCallback(async () => {
+    setActionMessage(t("mailboxes.syncJobCompleted"));
+    await loadMailboxList();
+  }, [loadMailboxList, t]);
+
+  const onSyncJobFailed = useCallback(
+    (job: Job) => {
+      setActionError(job.error_message ?? t("mailboxes.syncJobFailed"));
+    },
+    [t],
+  );
+
+  const polledSyncJob = useJobPolling({
+    job: activeSyncJob,
+    enabled: activeSyncJob !== null,
+    onCompleted: onSyncJobCompleted,
+    onFailed: onSyncJobFailed,
+  });
 
   useEffect(() => {
     if (authStatus === "loading") {
@@ -324,32 +346,42 @@ export default function MailboxSettingsPage() {
     setActionError(null);
     setActionMessage(null);
     setSyncingMailboxId(mailboxId);
+    setActiveSyncJob(null);
     setSyncStatuses((current) => ({
       ...current,
       [mailboxId]: { state: "loading" },
     }));
 
     try {
-      const response = await triggerMailboxSync(mailboxId);
-      setActionMessage(syncResultMessage(response.data));
-      await loadMailboxList();
+      const response = await triggerMailboxSyncJob(mailboxId);
+      setActiveSyncJob(response.data.job);
+      setActionMessage(t("mailboxes.syncJobQueued"));
+      await refreshSyncStatuses(mailboxes);
     } catch (error) {
-      const message = toErrorMessage(error, t);
-      const resolved = toMailboxLoadState(error, t);
-      if (
-        resolved.state === "not_signed_in" ||
-        resolved.state === "backend_unavailable"
-      ) {
-        setLoadState(resolved.state);
-        setLoadError(resolved.message);
-      }
-      setSyncStatuses((current) => ({
-        ...current,
-        [mailboxId]: { state: "error", message },
-      }));
-      setActionError(message);
-      if (isGmailReauthError(error)) {
+      try {
+        const fallbackResponse = await triggerMailboxSync(mailboxId);
+        setActionMessage(syncResultMessage(fallbackResponse.data));
         await loadMailboxList();
+      } catch (fallbackError) {
+        const message = toErrorMessage(fallbackError, t);
+        const resolved = toMailboxLoadState(fallbackError, t);
+        if (
+          resolved.state === "not_signed_in" ||
+          resolved.state === "backend_unavailable"
+        ) {
+          setLoadState(resolved.state);
+          setLoadError(resolved.message);
+        }
+        setSyncStatuses((current) => ({
+          ...current,
+          [mailboxId]: { state: "error", message },
+        }));
+        setActionError(
+          `${toErrorMessage(error, t)} ${t("mailboxes.syncFallbackFailed")} ${message}`,
+        );
+        if (isGmailReauthError(fallbackError)) {
+          await loadMailboxList();
+        }
       }
     } finally {
       setSyncingMailboxId(null);
@@ -460,7 +492,18 @@ export default function MailboxSettingsPage() {
                 mailbox={mailbox}
                 syncStatus={syncStatuses[mailbox.id]}
                 syncing={syncingMailboxId === mailbox.id}
+                activeJob={
+                  activeSyncJob?.related_resource_id === mailbox.id
+                    ? polledSyncJob.job
+                    : null
+                }
                 onSync={(mailboxId) => void onSyncMailbox(mailboxId)}
+                onJobRetried={(job) => {
+                  setActionError(null);
+                  setActionMessage(t("mailboxes.syncJobQueued"));
+                  setActiveSyncJob(job);
+                }}
+                onJobRetryError={(message) => setActionError(message)}
               />
             </div>
           </div>
