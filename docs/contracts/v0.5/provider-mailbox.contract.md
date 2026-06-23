@@ -111,8 +111,13 @@ If implemented, Outlook uses Microsoft Graph with minimal scopes:
 
 Sending scopes are not allowed.
 
+Until Outlook OAuth is configured, the backend exposes only preparation
+capabilities. Outlook action and sync capabilities remain disabled and provider
+operations return `outlook_not_configured`.
+
 Outlook errors:
 
+- `outlook_not_configured`
 - `outlook_oauth_failed`
 - `outlook_token_refresh_failed`
 - `outlook_graph_error`

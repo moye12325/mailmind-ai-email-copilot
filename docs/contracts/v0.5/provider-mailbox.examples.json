@@ -81,6 +81,17 @@
     "provider": "outlook",
     "external_id_source": "microsoft_graph_message_id",
     "minimum_scopes": ["offline_access", "User.Read", "Mail.ReadWrite"],
-    "connect_ui_enabled_without_oauth_config": false
+    "connect_ui_enabled_without_oauth_config": false,
+    "capabilities": {
+      "can_mark_read": false,
+      "can_mark_unread": false,
+      "can_fetch_body": false,
+      "can_fetch_thread": false,
+      "can_archive": false,
+      "can_label": false,
+      "supports_oauth": true,
+      "supports_password_auth": false,
+      "supports_folders": true
+    }
   }
 }
