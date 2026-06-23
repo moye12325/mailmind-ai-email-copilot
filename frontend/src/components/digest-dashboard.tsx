@@ -5,17 +5,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { JobProgressCard } from "@/components/jobs/job-progress-card";
+import { useJobPolling } from "@/components/jobs/use-job-polling";
 import { useAuth } from "@/lib/auth";
 import {
   ApiRequestError,
   dismissDigestItem,
   generateTodayDigest,
+  generateTodayDigestJob,
+  getDigest,
   getTodayDigest,
   markDigestItemDone,
   refreshTodayDigest,
+  refreshTodayDigestJob,
   snoozeDigestItem,
 } from "@/lib/api-client";
-import type { Digest, DigestItem } from "@/lib/api-types";
+import type { Digest, DigestItem, Job } from "@/lib/api-types";
+import { digestIdFromJob } from "@/lib/jobs";
 import { useI18n, type TranslationKey } from "@/i18n/provider";
 
 type DigestPageState =
@@ -197,6 +203,7 @@ export function DigestDashboard() {
   const [busyAction, setBusyAction] = useState<"generate" | "refresh" | null>(
     null,
   );
+  const [activeDigestJob, setActiveDigestJob] = useState<Job | null>(null);
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const [itemFeedback, setItemFeedback] = useState<Record<string, ItemFeedback>>(
     {},
@@ -227,6 +234,46 @@ export function DigestDashboard() {
       return false;
     }
   }, [t]);
+
+  const loadDigestAfterJob = useCallback(
+    async (job: Job): Promise<boolean> => {
+      const digestId = digestIdFromJob(job);
+      try {
+        const response = digestId
+          ? await getDigest(digestId)
+          : await getTodayDigest();
+        setDigest(response.data.digest);
+        setPageState("loaded");
+        setPageError(null);
+        return true;
+      } catch {
+        return loadDigest();
+      }
+    },
+    [loadDigest],
+  );
+
+  const onDigestJobCompleted = useCallback(
+    async (job: Job) => {
+      await loadDigestAfterJob(job);
+      setActionMessage(t("digest.jobCompletedMessage"));
+    },
+    [loadDigestAfterJob, t],
+  );
+
+  const onDigestJobFailed = useCallback(
+    (job: Job) => {
+      setActionError(job.error_message ?? t("digest.jobFailedMessage"));
+    },
+    [t],
+  );
+
+  const polledDigestJob = useJobPolling({
+    job: activeDigestJob,
+    enabled: activeDigestJob !== null,
+    onCompleted: onDigestJobCompleted,
+    onFailed: onDigestJobFailed,
+  });
 
   useEffect(() => {
     if (authStatus === "loading") {
@@ -262,20 +309,27 @@ export function DigestDashboard() {
   async function onGenerate() {
     setActionError(null);
     setActionMessage(null);
+    setActiveDigestJob(null);
     setBusyAction("generate");
 
     try {
-      const response = await generateTodayDigest();
-      setDigest(response.data.digest);
-      setPageState("loaded");
-      setPageError(null);
-      setActionMessage(t("digest.generatedMessage"));
+      const response = await generateTodayDigestJob();
+      setActiveDigestJob(response.data.job);
+      setActionMessage(t("digest.jobQueuedMessage"));
     } catch (error) {
-      const view = digestErrorView(error, t);
-      setActionError(view.message);
-      if (view.state === "unauthorized" || view.state === "backend_unavailable") {
-        setPageError(view);
-        setPageState(view.state);
+      try {
+        const response = await generateTodayDigest();
+        setDigest(response.data.digest);
+        setPageState("loaded");
+        setPageError(null);
+        setActionMessage(t("digest.generatedMessage"));
+      } catch (fallbackError) {
+        const view = digestErrorView(fallbackError, t);
+        setActionError(`${digestErrorView(error, t).message} ${view.message}`);
+        if (view.state === "unauthorized" || view.state === "backend_unavailable") {
+          setPageError(view);
+          setPageState(view.state);
+        }
       }
     } finally {
       setBusyAction(null);
@@ -285,20 +339,27 @@ export function DigestDashboard() {
   async function onRefreshDigest() {
     setActionError(null);
     setActionMessage(null);
+    setActiveDigestJob(null);
     setBusyAction("refresh");
 
     try {
-      const response = await refreshTodayDigest();
-      setDigest(response.data.digest);
-      setPageState("loaded");
-      setPageError(null);
-      setActionMessage(t("digest.refreshedMessage"));
+      const response = await refreshTodayDigestJob();
+      setActiveDigestJob(response.data.job);
+      setActionMessage(t("digest.jobQueuedMessage"));
     } catch (error) {
-      const view = digestErrorView(error, t);
-      setActionError(view.message);
-      if (view.state === "unauthorized" || view.state === "backend_unavailable") {
-        setPageError(view);
-        setPageState(view.state);
+      try {
+        const response = await refreshTodayDigest();
+        setDigest(response.data.digest);
+        setPageState("loaded");
+        setPageError(null);
+        setActionMessage(t("digest.refreshedMessage"));
+      } catch (fallbackError) {
+        const view = digestErrorView(fallbackError, t);
+        setActionError(`${digestErrorView(error, t).message} ${view.message}`);
+        if (view.state === "unauthorized" || view.state === "backend_unavailable") {
+          setPageError(view);
+          setPageState(view.state);
+        }
       }
     } finally {
       setBusyAction(null);
@@ -440,6 +501,21 @@ export function DigestDashboard() {
             <Badge tone="ok" dot>
               {actionMessage}
             </Badge>
+          </div>
+        ) : null}
+
+        {polledDigestJob.job ? (
+          <div style={{ marginTop: 14 }}>
+            <JobProgressCard
+              job={polledDigestJob.job}
+              title={t("digest.jobTitle")}
+              onRetried={(job) => {
+                setActionError(null);
+                setActionMessage(t("digest.jobQueuedMessage"));
+                setActiveDigestJob(job);
+              }}
+              onError={(message) => setActionError(message)}
+            />
           </div>
         ) : null}
       </section>
