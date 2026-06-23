@@ -21,11 +21,17 @@ def _register_client(prefix: str) -> tuple[TestClient, UUID]:
     return client, user_id
 
 
-def _create_mailbox(user_id: UUID, *, email: str, account_id: str) -> UUID:
+def _create_mailbox(
+    user_id: UUID,
+    *,
+    email: str,
+    account_id: str,
+    provider: str = "gmail",
+) -> UUID:
     with SessionLocal() as db:
         mailbox = Mailbox(
             user_id=user_id,
-            provider="gmail",
+            provider=provider,
             provider_account_id=account_id,
             email_address=email,
             display_name="Mailbox User",
@@ -102,6 +108,25 @@ def test_get_mailbox_capabilities_returns_compact_provider_payload() -> None:
     assert payload["provider"] == "gmail"
     assert payload["capabilities"]["can_mark_unread"] is True
     assert payload["capabilities"]["supports_folders"] is False
+
+
+def test_get_mailbox_detail_returns_outlook_preparation_capabilities() -> None:
+    client, user_id = _register_client("mailbox-detail-outlook")
+    mailbox_id = _create_mailbox(
+        user_id,
+        email="outlook@example.com",
+        account_id="outlook-account",
+        provider="outlook",
+    )
+
+    response = client.get(f"/api/mailboxes/{mailbox_id}")
+
+    assert response.status_code == 200
+    mailbox = response.json()["data"]["mailbox"]
+    assert mailbox["provider"] == "outlook"
+    assert mailbox["capabilities"]["supports_oauth"] is True
+    assert mailbox["capabilities"]["can_mark_read"] is False
+    assert mailbox["capabilities"]["supports_password_auth"] is False
 
 
 def test_get_mailbox_detail_blocks_access_to_other_users_mailbox() -> None:

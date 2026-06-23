@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.providers.base import MailboxProvider
 from app.providers.gmail import GmailProvider
 from app.providers.imap import ImapProvider
+from app.providers.outlook import OutlookProvider
 
 
 class ProviderRegistryError(Exception):
@@ -19,6 +20,8 @@ def get_mailbox_provider(provider_key: str) -> MailboxProvider:
         return GmailProvider()
     if normalized == ImapProvider.provider_key:
         return ImapProvider()
+    if normalized == OutlookProvider.provider_key:
+        return OutlookProvider()
     raise ProviderRegistryError(
         "unsupported_mailbox_provider",
         "Unsupported mailbox provider.",
