@@ -1,8 +1,9 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { JobProgressCard } from "@/components/jobs/job-progress-card";
 import { useI18n } from "@/i18n/provider";
-import type { Mailbox, MailboxSyncStatusData } from "@/lib/api-types";
+import type { Job, Mailbox, MailboxSyncStatusData } from "@/lib/api-types";
 import {
   formatDateTimeWithRelative,
   isConnectedMailbox,
@@ -23,12 +24,18 @@ export function MailboxSyncCard({
   mailbox,
   syncStatus,
   syncing = false,
+  activeJob = null,
   onSync,
+  onJobRetried,
+  onJobRetryError,
 }: {
   mailbox: Mailbox;
   syncStatus?: MailboxSyncStatusView;
   syncing?: boolean;
+  activeJob?: Job | null;
   onSync: (mailboxId: string) => void;
+  onJobRetried?: (job: Job) => void;
+  onJobRetryError?: (message: string) => void;
 }) {
   const { t } = useI18n();
   const loaded = syncStatus?.state === "loaded" ? syncStatus.data : undefined;
@@ -93,6 +100,17 @@ export function MailboxSyncCard({
           <Badge tone="danger" dot>
             {syncError}
           </Badge>
+        </div>
+      ) : null}
+
+      {activeJob ? (
+        <div style={{ marginTop: 14 }}>
+          <JobProgressCard
+            job={activeJob}
+            title={t("mailboxes.syncJobTitle")}
+            onRetried={onJobRetried}
+            onError={onJobRetryError}
+          />
         </div>
       ) : null}
 

@@ -8,6 +8,8 @@ import { StatusBanner } from "@/components/status-banner";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { JobActivityList } from "@/components/jobs/job-activity-list";
+import { useRecentJobs } from "@/components/jobs/use-recent-jobs";
 import { useAuth } from "@/lib/auth";
 import { ApiRequestError, getAction, listActions } from "@/lib/api-client";
 import type { UserAction } from "@/lib/api-types";
@@ -27,6 +29,8 @@ interface ActionErrorView {
 }
 
 type TFunction = (key: TranslationKey) => string;
+
+const RECENT_JOBS_QUERY = { limit: 8 };
 
 function actionErrorView(error: unknown, t: TFunction): ActionErrorView {
   if (error instanceof ApiRequestError) {
@@ -130,6 +134,11 @@ export default function ActionsPage() {
   const [selectedAction, setSelectedAction] = useState<UserAction | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [jobRetryError, setJobRetryError] = useState<string | null>(null);
+  const recentJobs = useRecentJobs({
+    enabled: authStatus === "authenticated",
+    query: RECENT_JOBS_QUERY,
+  });
 
   const actionTypes = useMemo(
     () => uniqueValues(actions, "action_type"),
@@ -271,8 +280,52 @@ export default function ActionsPage() {
     }
 
     return (
-      <div className="mm-grid mm-grid-2">
+      <div className="mm-stack">
         <section className="mm-card">
+          <div className="mm-spread" style={{ alignItems: "flex-start" }}>
+            <div>
+              <div className="mm-card-title">{t("jobs.activity")}</div>
+              <p className="mm-muted" style={{ fontSize: 13 }}>
+                {t("jobs.activityDescription")}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="mm-btn"
+              onClick={() => {
+                setJobRetryError(null);
+                void recentJobs.refresh();
+              }}
+            >
+              {t("common.refresh")}
+            </button>
+          </div>
+
+          {jobRetryError ? (
+            <div style={{ marginTop: 12 }}>
+              <Badge tone="danger" dot>
+                {jobRetryError}
+              </Badge>
+            </div>
+          ) : null}
+
+          <div style={{ marginTop: 16 }}>
+            <JobActivityList
+              jobs={recentJobs.jobs}
+              loading={recentJobs.loading}
+              error={recentJobs.error}
+              onRefresh={() => void recentJobs.refresh()}
+              onRetried={() => {
+                setJobRetryError(null);
+                void recentJobs.refresh();
+              }}
+              onRetryError={(message) => setJobRetryError(message)}
+            />
+          </div>
+        </section>
+
+        <div className="mm-grid mm-grid-2">
+          <section className="mm-card">
           <div className="mm-spread" style={{ alignItems: "flex-start" }}>
             <div>
               <div className="mm-card-title">{t("actions.history")}</div>
@@ -346,14 +399,15 @@ export default function ActionsPage() {
               ))}
             </div>
           )}
-        </section>
+          </section>
 
-        <ActionDetailPanel
-          action={selectedAction}
-          loading={detailLoading}
-          error={detailError}
-          t={t}
-        />
+          <ActionDetailPanel
+            action={selectedAction}
+            loading={detailLoading}
+            error={detailError}
+            t={t}
+          />
+        </div>
       </div>
     );
   }
