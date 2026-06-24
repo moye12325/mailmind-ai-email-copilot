@@ -1,5 +1,5 @@
 from app.core.config import Settings
-from app.jobs.celery_app import create_celery_app
+from app.jobs.celery_app import create_celery_app, default_worker_pool
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -23,6 +23,15 @@ def test_celery_app_uses_eager_mode_for_tests() -> None:
     assert celery_app.conf.result_backend == "redis://localhost:6379/9"
     assert celery_app.conf.task_always_eager is True
     assert celery_app.conf.task_eager_propagates is True
+
+
+def test_windows_worker_pool_defaults_to_solo(monkeypatch) -> None:
+    monkeypatch.setattr("app.jobs.celery_app.os.name", "nt")
+
+    celery_app = create_celery_app(Settings())
+
+    assert default_worker_pool() == "solo"
+    assert celery_app.conf.worker_pool == "solo"
 
 
 def test_health_check_task_runs_in_eager_mode() -> None:
