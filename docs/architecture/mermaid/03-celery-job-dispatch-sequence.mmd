@@ -1,0 +1,65 @@
+---
+title: "Celery Job Dispatch Sequence"
+description: "Commit-then-dispatch reliability model for background jobs"
+---
+
+sequenceDiagram
+    autonumber
+    participant API as FastAPI API
+    participant DB as PostgreSQL
+    participant Redis as Redis Broker
+    participant Worker as Celery Worker
+    participant Provider as Email Provider / LLM
+
+    Note over API,Provider: Phase 1: Job Creation & Dispatch
+
+    API->>DB: Create SyncJob (status=pending_dispatch)
+    DB-->>API: Job committed to database
+
+    rect rgb(200, 230, 200)
+        Note right of API: Commit-then-dispatch<br/>Job is visible to workers BEFORE task is sent
+    end
+
+    API->>DB: Re-read job, validate pending_dispatch
+    API->>Redis: dispatch Celery task
+    Redis-->>API: celery_task_id returned
+    API->>DB: Update job (status=queued, celery_task_id)
+    DB-->>API: Queued state committed
+
+    Note over API,Worker: Phase 2: Worker Execution
+
+    Worker->>Redis: Consume task from queue
+    Worker->>DB: Re-read job, validate status=queued
+    Worker->>DB: Update job (status=running, started_at)
+    Worker->>Redis: Acquire distributed lock (SET NX EX)
+
+    alt Lock acquired
+        Worker->>Provider: Execute job (sync emails / generate digest)
+        Provider-->>Worker: Result returned
+
+        alt Success
+            Worker->>DB: Update job (status=succeeded, finished_at)
+            Worker->>DB: Update mailbox (last_successful_sync_at)
+        else Failure
+            Worker->>DB: Update job (status=failed, error_code, error_message)
+            opt MAILBOX_REAUTH_REQUIRED
+                Worker->>DB: Update mailbox (status=reauth_required)
+            end
+        end
+
+        Worker->>Redis: Release lock (Lua script, verify owner)
+    else Lock held by another job
+        Worker->>DB: Update job (status=failed, error=lock_held)
+    end
+
+    Note over API,Worker: Phase 3: Edge Cases
+
+    rect rgb(255, 230, 230)
+        Note right of Worker: Stale/Orphan Task Handling
+    end
+
+    Note over Worker: If task arrives but job is already<br/>succeeded/failed/cancelled:<br/>→ Worker skips execution safely
+
+    Note over API: If dispatch fails after DB commit:<br/>→ Job stays pending_dispatch<br/>→ Can be recovered by retry sweep
+
+    Note over API: If stale detected (queued > 5min / running > 20min):<br/>→ Old job marked failed<br/>→ New job replaces it

@@ -1,0 +1,54 @@
+---
+title: "Digest Scope Flow"
+description: "How All Mailboxes vs Single Mailbox digest scope works"
+---
+
+flowchart TD
+    Start(["User requests digest"]) --> ResolveScope{"Resolve scope_type"}
+
+    ResolveScope -->|"mailbox_id provided"| SingleScope["scope_type = mailbox"]
+    ResolveScope -->|"no mailbox_id"| AllScope["scope_type = all"]
+
+    subgraph Single_Mailbox_Path["Single Mailbox Digest"]
+        SingleScope --> QuerySingle["Query selected mailbox<br/>WHERE mailbox_id = ?<br/>AND status = 'active'"]
+        QuerySingle --> FetchSingle["Fetch emails for today window<br/>(midnight → now in user timezone)"]
+        FetchSingle --> BuildSinglePrompt["Build LLM prompt<br/>• Single mailbox metadata<br/>• Emails from one source"]
+        BuildSinglePrompt --> CallLLMSingle["Call AI Provider"]
+        CallLLMSingle --> ParseSingle["Parse structured output<br/>• mailbox-specific items<br/>• per-mailbox summary"]
+        ParseSingle --> CreateSingleDigest["Create DailyDigest<br/>scope_type=mailbox<br/>mailbox_id=ID<br/>is_current=true"]
+    end
+
+    subgraph All_Mailboxes_Path["All Mailboxes Digest"]
+        AllScope --> QueryAll["Query ALL active mailboxes<br/>WHERE user_id = ?<br/>AND status = 'active'"]
+        QueryAll --> FetchAll["Fetch emails across all mailboxes<br/>for today window"]
+        FetchAll --> BuildAllPrompt["Build LLM prompt<br/>• All mailbox metadata<br/>• Emails tagged by source<br/>• Cross-mailbox context"]
+        BuildAllPrompt --> CallLLMAll["Call AI Provider"]
+        CallLLMAll --> ParseAll["Parse structured output<br/>• items from any mailbox<br/>• global priority queue<br/>• per-mailbox summaries<br/>• overall summary"]
+        ParseAll --> CreateAllDigest["Create DailyDigest<br/>scope_type=all<br/>mailbox_id=NULL<br/>is_current=true"]
+    end
+
+    CreateSingleDigest --> VersionMgmt["Version Management"]
+    CreateAllDigest --> VersionMgmt
+
+    VersionMgmt --> FlipOld["Set old digest<br/>is_current=false"]
+    FlipOld --> MarkFresh["Set new digest<br/>status=fresh"]
+    MarkFresh --> RecordAI["Record AIRun<br/>(tokens, latency, hash)"]
+    RecordAI --> MarkJob["Mark SyncJob<br/>status=succeeded"]
+    MarkJob --> Done(["Digest available<br/>on dashboard"])
+
+    subgraph Dedup["Deduplication"]
+        JobKey["job_key =<br/>'generate_daily_digest:{scope}:{date}'"]
+        UniqueIdx["Partial unique index on<br/>active statuses prevents<br/>duplicate in-flight jobs"]
+    end
+
+    Start -.-> Dedup
+
+    classDef scope fill:#3b82f6,stroke:#2563eb,color:#fff
+    classDef process fill:#10b981,stroke:#059669,color:#fff
+    classDef data fill:#f59e0b,stroke:#d97706,color:#fff
+    classDef endpoint fill:#8b5cf6,stroke:#7c3aed,color:#fff
+
+    class SingleScope,AllScope scope
+    class QuerySingle,FetchSingle,BuildSinglePrompt,CallLLMSingle,ParseSingle,QueryAll,FetchAll,BuildAllPrompt,CallLLMAll,ParseAll process
+    class CreateSingleDigest,CreateAllDigest,VersionMgmt,FlipOld,MarkFresh,RecordAI,MarkJob data
+    class Start,Done endpoint

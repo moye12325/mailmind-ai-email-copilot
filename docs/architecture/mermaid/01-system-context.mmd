@@ -1,0 +1,45 @@
+---
+title: "MailMind System Context"
+description: "High-level view of MailMind and its external dependencies"
+---
+
+graph TB
+    subgraph Users
+        Browser["Browser / Next.js Frontend<br/><i>Next.js 15 · React 19 · TypeScript</i>"]
+    end
+
+    subgraph MailMind_System["MailMind System"]
+        API["FastAPI Backend<br/><i>Python 3.11+ · SQLAlchemy 2.0</i>"]
+        Worker["Celery Worker<br/><i>Async job execution</i>"]
+    end
+
+    subgraph Data_Stores["Data Stores"]
+        PostgreSQL[("PostgreSQL<br/><i>Primary data store</i>")]
+        Redis[("Redis<br/><i>Broker · Result backend · Locks</i>")]
+    end
+
+    subgraph External_Services["External Services"]
+        Gmail["Gmail API<br/><i>OAuth2 · REST</i>"]
+        IMAP["IMAP Servers<br/><i>Any standard IMAP</i>"]
+        AI["AI Provider Chain<br/><i>OpenAI-compatible LLM</i>"]
+    end
+
+    Browser -->|"HTTP / REST"| API
+    API -->|"Dispatch jobs"| Redis
+    Worker -->|"Consume tasks"| Redis
+    Worker -->|"Read / Write"| PostgreSQL
+    API -->|"Read / Write"| PostgreSQL
+    Worker -->|"Fetch emails"| Gmail
+    Worker -->|"Fetch emails"| IMAP
+    Worker -->|"Generate digest"| AI
+    API -->|"Token refresh"| Gmail
+
+    classDef frontend fill:#3b82f6,stroke:#2563eb,color:#fff
+    classDef backend fill:#10b981,stroke:#059669,color:#fff
+    classDef data fill:#f59e0b,stroke:#d97706,color:#fff
+    classDef external fill:#8b5cf6,stroke:#7c3aed,color:#fff
+
+    class Browser frontend
+    class API,Worker backend
+    class PostgreSQL,Redis data
+    class Gmail,IMAP,AI external

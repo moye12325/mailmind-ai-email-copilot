@@ -1,0 +1,222 @@
+---
+title: "MailMind Data Model"
+description: "Core entity-relationship diagram for MailMind's PostgreSQL schema"
+---
+
+erDiagram
+    users ||--o{ sessions : "has"
+    users ||--o{ auth_accounts : "has"
+    users ||--o{ mailboxes : "owns"
+    users ||--o{ emails : "owns"
+    users ||--o{ sync_jobs : "owns"
+    users ||--o{ daily_digests : "owns"
+    users ||--o{ user_actions : "owns"
+
+    mailboxes ||--|| mailbox_credentials : "has"
+    mailboxes ||--o{ emails : "contains"
+    mailboxes ||--o{ sync_jobs : "targets"
+    mailboxes ||--o{ daily_digests : "scoped to"
+
+    daily_digests ||--o{ digest_items : "contains"
+    daily_digests ||--o{ ai_runs : "tracked by"
+    daily_digests ||--o{ sync_jobs : "produced by"
+
+    emails ||--o{ digest_items : "referenced by"
+    emails ||--o{ user_actions : "acted on"
+
+    digest_items ||--o{ user_actions : "acted on"
+
+    users {
+        uuid id PK
+        string email UK "unique, 255 chars"
+        string display_name
+        text password_hash
+        string status "active | disabled"
+        string timezone "default Asia/Shanghai"
+        datetime created_at
+        datetime updated_at
+    }
+
+    sessions {
+        uuid id PK
+        uuid user_id FK
+        text session_token_hash UK
+        datetime expires_at
+        datetime last_used_at
+        inet ip_address
+        text user_agent
+        datetime revoked_at
+        datetime created_at
+    }
+
+    auth_accounts {
+        uuid id PK
+        uuid user_id FK
+        string provider
+        string provider_user_id
+        string provider_email
+        datetime created_at
+    }
+
+    mailboxes {
+        uuid id PK
+        uuid user_id FK
+        string provider "gmail | outlook | imap"
+        string provider_account_id
+        string email_address
+        string display_name
+        string permission_mode "readonly | write_enabled"
+        text[] granted_scopes
+        string status "active | reauth_required | disconnected | error"
+        datetime last_sync_at
+        datetime last_successful_sync_at
+        string last_history_id
+        jsonb sync_cursor
+        datetime created_at
+        datetime updated_at
+    }
+
+    mailbox_credentials {
+        uuid mailbox_id PK_FK
+        string credential_type "oauth2 | imap_password"
+        text refresh_token_encrypted
+        text imap_password_encrypted
+        text[] scopes_snapshot
+        jsonb credentials_json "IMAP config: host, port, folder, uidvalidity"
+        string encryption_key_version
+        datetime created_at
+        datetime updated_at
+    }
+
+    emails {
+        uuid id PK
+        uuid user_id FK
+        uuid mailbox_id FK
+        string provider "gmail | outlook | imap"
+        string external_id "provider-specific msg ID"
+        string external_thread_id
+        string internet_message_id
+        text subject
+        string from_name
+        string from_address
+        jsonb to_addresses
+        jsonb cc_addresses
+        text snippet
+        text body_text
+        boolean body_text_truncated
+        datetime received_at
+        boolean is_read
+        text[] provider_labels
+        string gmail_history_id
+        datetime first_synced_at
+        datetime last_synced_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    sync_jobs {
+        uuid id PK
+        uuid user_id FK
+        uuid mailbox_id FK "null for all-mailbox jobs"
+        uuid digest_id FK "null until linked"
+        string celery_task_id UK
+        string job_type "sync | digest | refresh | scheduled"
+        string trigger_source "manual | scheduled | system | ..."
+        string job_key "idempotency key"
+        date target_date
+        string status "pending_dispatch | queued | running | succeeded | failed"
+        int retry_count
+        jsonb payload_json
+        string error_code
+        text error_message
+        datetime created_at
+        datetime started_at
+        datetime finished_at
+    }
+
+    daily_digests {
+        uuid id PK
+        uuid user_id FK
+        string scope_type "all | mailbox"
+        uuid mailbox_id FK "null when scope_type=all"
+        date digest_date
+        int version
+        boolean is_current
+        string status "generating | fresh | stale | refreshing | failed"
+        string trigger_source
+        datetime generation_started_at
+        datetime generated_at
+        datetime coverage_start
+        datetime coverage_end
+        int mail_count
+        int new_mail_count_after_digest
+        jsonb overview_json
+        datetime created_at
+        datetime updated_at
+    }
+
+    digest_items {
+        uuid id PK
+        uuid digest_id FK
+        uuid user_id FK
+        uuid mailbox_id FK
+        uuid email_id FK "null for todo/risk items"
+        string item_type "email | todo | risk"
+        string section "urgent | review | ignore | todo | risk"
+        text title
+        text summary
+        string category "work | notification | marketing | social | other"
+        string suggested_action
+        string priority "high | medium | low"
+        text reason
+        date deadline
+        numeric confidence "0-1"
+        int display_order
+        datetime created_at
+        datetime updated_at
+    }
+
+    ai_runs {
+        uuid id PK
+        uuid user_id FK
+        uuid mailbox_id FK
+        uuid digest_id FK
+        string run_type "daily_digest | single_email | new_mail_preview"
+        string trigger_source
+        string model_provider
+        string model_name
+        string prompt_version
+        string output_schema_version
+        char input_hash "SHA-256 for dedup"
+        jsonb input_summary_json
+        jsonb output_json
+        string status "queued | running | succeeded | failed | cancelled"
+        string error_code
+        text error_message
+        int prompt_tokens
+        int completion_tokens
+        int total_tokens
+        int latency_ms
+        datetime created_at
+        datetime started_at
+        datetime finished_at
+    }
+
+    user_actions {
+        uuid id PK
+        uuid user_id FK
+        uuid mailbox_id FK
+        uuid digest_id FK
+        uuid digest_item_id FK
+        uuid email_id FK
+        string action_type "open | mark_read | dismiss | snooze | ..."
+        string action_status "pending | executed | failed | cancelled"
+        string source "dashboard | email_detail | settings | system"
+        string provider_effect "none | local_only | gmail_synced | ..."
+        jsonb before_state
+        jsonb after_state
+        string error_code
+        text error_message
+        datetime created_at
+        datetime executed_at
+    }
