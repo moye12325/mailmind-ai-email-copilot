@@ -20,11 +20,19 @@ It turns inbox overload into an actionable Daily Digest — prioritized by urgen
 
 <br />
 
-<img src="docs/ui/screenshots/v051/final/dashboard-neon-cyber-1440x900.png" alt="MailMind Dashboard — Neon Cyber theme" width="900" />
+<img src="docs/ui/screenshots/v051/final/Digest.png" alt="MailMind Daily Digest" width="900" />
 
 <br />
 
-<sub>Dashboard · 6 themes with light/dark mode · Neon Cyber shown</sub>
+<img src="docs/ui/screenshots/v051/final/emails.png" alt="MailMind Emails" width="900" />
+
+<br />
+
+<img src="docs/ui/screenshots/v051/final/mailboxes.png" alt="MailMind Mailboxes" width="900" />
+
+<br />
+
+<sub>Daily Digest · Emails · Mailboxes · 6 themes with light/dark mode</sub>
 
 </div>
 
