@@ -133,6 +133,7 @@ def downgrade() -> None:
     op.drop_table("mailbox_archive_states")
 
     op.drop_constraint("sync_jobs_job_type_check", "sync_jobs", type_="check")
+    op.execute("DELETE FROM sync_jobs WHERE job_type = 'email_archive_backfill'")
     op.create_check_constraint(
         "sync_jobs_job_type_check",
         "sync_jobs",

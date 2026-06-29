@@ -9,6 +9,7 @@ CURRENT_BUSINESS_TABLES = {
     "sessions",
     "mailboxes",
     "mailbox_credentials",
+    "mailbox_archive_states",
     "emails",
     "sync_jobs",
     "daily_digests",
@@ -46,9 +47,17 @@ def test_emails_columns_and_constraints_match_database_design() -> None:
         "body_text",
         "body_text_truncated",
         "received_at",
+        "sent_at",
         "is_read",
+        "is_starred",
+        "has_attachments",
         "provider_labels",
+        "provider_metadata_json",
         "gmail_history_id",
+        "body_html",
+        "body_cache_status",
+        "body_cached_at",
+        "body_cache_source",
         "first_synced_at",
         "last_synced_at",
         "created_at",
@@ -111,6 +120,7 @@ def test_sync_jobs_columns_and_constraints_match_database_design() -> None:
     assert job_type_checks == [
         "job_type IN ("
         "'sync_today_emails', "
+        "'email_archive_backfill', "
         "'generate_daily_digest', "
         "'refresh_daily_digest', "
         "'check_new_emails_after_digest', "

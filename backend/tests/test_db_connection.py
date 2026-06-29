@@ -11,6 +11,7 @@ CURRENT_BUSINESS_TABLES = {
     "sessions",
     "mailboxes",
     "mailbox_credentials",
+    "mailbox_archive_states",
     "emails",
     "sync_jobs",
     "daily_digests",

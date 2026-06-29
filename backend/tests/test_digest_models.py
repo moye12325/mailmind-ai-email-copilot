@@ -9,6 +9,7 @@ EXPECTED_BUSINESS_TABLES = {
     "sessions",
     "mailboxes",
     "mailbox_credentials",
+    "mailbox_archive_states",
     "emails",
     "sync_jobs",
     "daily_digests",
@@ -157,6 +158,7 @@ def test_sync_jobs_accepts_digest_jobs_with_real_digest_foreign_key() -> None:
     assert job_type_checks == [
         "job_type IN ("
         "'sync_today_emails', "
+        "'email_archive_backfill', "
         "'generate_daily_digest', "
         "'refresh_daily_digest', "
         "'check_new_emails_after_digest', "

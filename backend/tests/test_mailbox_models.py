@@ -2,13 +2,14 @@ from app.db import models  # noqa: F401
 from app.db.base import Base
 
 
-MAILBOX_TABLES = {"mailboxes", "mailbox_credentials"}
+MAILBOX_TABLES = {"mailboxes", "mailbox_credentials", "mailbox_archive_states"}
 CURRENT_BUSINESS_TABLES = {
     "users",
     "auth_accounts",
     "sessions",
     "mailboxes",
     "mailbox_credentials",
+    "mailbox_archive_states",
     "emails",
     "sync_jobs",
     "daily_digests",

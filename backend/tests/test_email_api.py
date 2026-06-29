@@ -179,6 +179,7 @@ def test_get_emails_filters_by_read_state_mailbox_and_owner() -> None:
         "limit": 50,
         "offset": 0,
         "count": 1,
+        "total": 1,
         "has_more": False,
     }
     assert "body_text" not in data["emails"][0]
@@ -259,6 +260,7 @@ def test_get_emails_paginates_by_received_at_desc() -> None:
         "limit": 2,
         "offset": 0,
         "count": 2,
+        "total": 3,
         "has_more": True,
     }
 

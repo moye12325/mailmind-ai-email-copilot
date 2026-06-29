@@ -11,6 +11,7 @@ EXPECTED_BUSINESS_TABLES = {
     "sessions",
     "mailboxes",
     "mailbox_credentials",
+    "mailbox_archive_states",
     "emails",
     "sync_jobs",
     "daily_digests",
@@ -72,6 +73,7 @@ def test_email_sync_migration_upgrades_and_downgrades() -> None:
         }
         assert "generate_daily_digest" in checks["sync_jobs_job_type_check"]
         assert "refresh_daily_digest" in checks["sync_jobs_job_type_check"]
+        assert "email_archive_backfill" in checks["sync_jobs_job_type_check"]
         assert "sync_jobs_mailbox_created_idx" in {
             index["name"] for index in inspector.get_indexes("sync_jobs")
         }

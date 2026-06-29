@@ -3,7 +3,11 @@ from app.db.base import Base
 
 
 IDENTITY_TABLES = {"users", "auth_accounts", "sessions"}
-MAILBOX_FOUNDATION_TABLES = {"mailboxes", "mailbox_credentials"}
+MAILBOX_FOUNDATION_TABLES = {
+    "mailboxes",
+    "mailbox_credentials",
+    "mailbox_archive_states",
+}
 CURRENT_BUSINESS_TABLES = IDENTITY_TABLES | MAILBOX_FOUNDATION_TABLES | {
     "emails",
     "sync_jobs",
