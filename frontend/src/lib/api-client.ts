@@ -21,6 +21,8 @@ import {
   type DigestScopeRequest,
   type DigestResponse,
   type EmailMutationResponse,
+  type EmailListQuery,
+  type EmailsResponse,
   type EmailResponse,
   type GmailLoginResponse,
   type ImapConnectRequest,
@@ -29,6 +31,8 @@ import {
   type JobResponse,
   type JobsResponse,
   type MailboxResponse,
+  type MailboxArchiveJobResponse,
+  type MailboxArchiveStateResponse,
   type MailboxSyncJobResponse,
   type MailboxSyncResponse,
   type MailboxSyncStatusResponse,
@@ -174,6 +178,28 @@ export function triggerMailboxSyncJob(
   );
 }
 
+export function triggerMailboxArchiveJob(
+  mailboxId: string,
+): Promise<MailboxArchiveJobResponse> {
+  return request<MailboxArchiveJobResponse>(
+    API_ROUTES.mailboxes.archiveJobs(mailboxId),
+    {
+      method: "POST",
+    },
+  );
+}
+
+export function getMailboxArchiveState(
+  mailboxId: string,
+): Promise<MailboxArchiveStateResponse> {
+  return request<MailboxArchiveStateResponse>(
+    API_ROUTES.mailboxes.archiveState(mailboxId),
+    {
+      method: "GET",
+    },
+  );
+}
+
 export function startGmailLogin(): Promise<GmailLoginResponse> {
   return request<GmailLoginResponse>(API_ROUTES.gmailAuth.login, {
     method: "GET",
@@ -289,6 +315,12 @@ export function listTodayEmails(): Promise<TodayEmailsResponse> {
   });
 }
 
+export function listEmails(query?: EmailListQuery): Promise<EmailsResponse> {
+  return request<EmailsResponse>(withQuery(API_ROUTES.emails.list, query), {
+    method: "GET",
+  });
+}
+
 export function getEmail(emailId: string): Promise<EmailResponse> {
   return request<EmailResponse>(API_ROUTES.emails.byId(emailId), {
     method: "GET",
@@ -382,6 +414,7 @@ export const apiClient = {
   },
 
   emails: {
+    list: listEmails,
     today: listTodayEmails,
     new(): Promise<ApiResult> {
       return notImplemented(`GET ${API_ROUTES.emails.new}`);
@@ -397,6 +430,8 @@ export const apiClient = {
     syncStatus: getMailboxSyncStatus,
     sync: triggerMailboxSync,
     syncJob: triggerMailboxSyncJob,
+    archiveJob: triggerMailboxArchiveJob,
+    archiveState: getMailboxArchiveState,
   },
 
   gmailAuth: {

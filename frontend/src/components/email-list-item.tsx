@@ -35,6 +35,11 @@ export function EmailListItem({
 }) {
   const { t } = useI18n();
   const statusLabel = email.is_read ? t("emails.read") : t("emails.unread");
+  const mailboxLabel =
+    sourceLabel ||
+    email.mailbox_display_name ||
+    email.mailbox_email ||
+    email.mailbox_id;
   const detailHref = listHref.includes("?")
     ? `/emails/${email.id}?${listHref.split("?")[1]}`
     : `/emails/${email.id}`;
@@ -69,12 +74,12 @@ export function EmailListItem({
           >
             {email.sender}
           </div>
-          {sourceLabel ? (
+          {mailboxLabel ? (
             <div
               className="mm-muted"
               style={{ fontSize: 12, marginTop: 3, overflowWrap: "anywhere" }}
             >
-              {sourceLabel}
+              {mailboxLabel}
             </div>
           ) : null}
         </div>
@@ -105,6 +110,9 @@ export function EmailListItem({
             {label}
           </span>
         ))}
+        {email.has_attachments ? (
+          <span className="mm-chip">{t("emails.hasAttachments")}</span>
+        ) : null}
         <button
           type="button"
           className="mm-btn"

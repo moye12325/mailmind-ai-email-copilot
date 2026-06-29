@@ -95,6 +95,12 @@ export function JobActivityList({
                 {job.related_resource_id ? ` ${job.related_resource_id}` : ""}
               </span>
             ) : null}
+            {job.job_type === "email_archive_backfill" &&
+            typeof job.result.synced_count === "number" ? (
+              <span className="mm-muted">
+                {job.result.synced_count} messages synced
+              </span>
+            ) : null}
           </div>
 
           <JobErrorPanel

@@ -31,10 +31,11 @@ import {
   getMailboxSyncStatus,
   listMailboxes,
   startGmailLogin,
+  triggerMailboxArchiveJob,
   triggerMailboxSync,
   triggerMailboxSyncJob,
 } from "@/lib/api-client";
-import type { Job, Mailbox } from "@/lib/api-types";
+import type { Job, Mailbox, MailboxArchiveState } from "@/lib/api-types";
 import { isActiveJob } from "@/lib/jobs";
 import {
   formatDateTimeWithRelative,
@@ -168,6 +169,57 @@ function mailboxStatusTone(status: string): BadgeTone {
   }
 }
 
+function archiveStatusTone(status: string): BadgeTone {
+  switch (status) {
+    case "complete":
+      return "ok";
+    case "failed":
+      return "danger";
+    case "not_started":
+      return "neutral";
+    case "running":
+    case "partial":
+      return "info";
+    case "canceled":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}
+
+function archiveButtonLabel(
+  state: MailboxArchiveState | undefined,
+  t: TFunction,
+): string {
+  switch (state?.status) {
+    case "partial":
+      return t("mailboxes.resumeArchive");
+    case "failed":
+      return t("mailboxes.retryArchive");
+    case "running":
+      return t("mailboxes.archiveRunningButton");
+    case "complete":
+      return t("mailboxes.archiveCompleteButton");
+    default:
+      return t("mailboxes.startFullArchive");
+  }
+}
+
+function archiveStateOrDefault(mailbox: Mailbox): MailboxArchiveState {
+  return (
+    mailbox.archive_state ?? {
+      mailbox_id: mailbox.id,
+      status: "not_started",
+      is_complete: false,
+      total_synced_count: 0,
+      batch_count: 0,
+      newest_synced_at: null,
+      oldest_synced_at: null,
+      message: undefined,
+    }
+  );
+}
+
 function actionButtonStyle(disabled: boolean): CSSProperties {
   return { cursor: disabled ? "not-allowed" : "pointer" };
 }
@@ -287,6 +339,7 @@ export default function MailboxSettingsPage() {
   const [showImapPassword, setShowImapPassword] = useState(false);
   const [imapForm, setImapForm] = useState<ImapFormState>(initialImapForm);
   const [syncingMailboxId, setSyncingMailboxId] = useState<string | null>(null);
+  const [archivingMailboxId, setArchivingMailboxId] = useState<string | null>(null);
   const [activeSyncJobsByMailboxId, setActiveSyncJobsByMailboxId] = useState<
     Record<string, Job>
   >({});
@@ -535,6 +588,27 @@ export default function MailboxSettingsPage() {
     }
   }
 
+  async function onArchiveMailbox(mailbox: Mailbox) {
+    const confirmed = window.confirm(t("mailboxes.archiveConfirm"));
+    if (!confirmed) {
+      return;
+    }
+
+    setActionError(null);
+    setActionMessage(null);
+    setArchivingMailboxId(mailbox.id);
+
+    try {
+      await triggerMailboxArchiveJob(mailbox.id);
+      setActionMessage(t("mailboxes.archiveJobQueued"));
+      await Promise.all([loadMailboxList(), recentSyncJobs.refresh()]);
+    } catch (error) {
+      setActionError(toErrorMessage(error, t));
+    } finally {
+      setArchivingMailboxId(null);
+    }
+  }
+
   function renderMailboxList() {
     if (loadState === "loading") {
       return <Skeleton lines={4} widths={["42%", "80%", "65%", "52%"]} />;
@@ -585,6 +659,13 @@ export default function MailboxSettingsPage() {
       <div className="mm-stack" style={{ gap: 0 }}>
         {mailboxes.map((mailbox, index) => {
           const imapText = isImapMailbox(mailbox) ? imapConnectionText(mailbox) : null;
+          const archiveState = archiveStateOrDefault(mailbox);
+          const archiveDisabled =
+            !canAct ||
+            busy ||
+            archivingMailboxId === mailbox.id ||
+            archiveState.status === "running" ||
+            archiveState.status === "complete";
           return (
             <div
               key={mailbox.id}
@@ -686,6 +767,73 @@ export default function MailboxSettingsPage() {
                   }}
                   onJobRetryError={(message) => setActionError(message)}
                 />
+              </div>
+
+              <div
+                style={{
+                  border: "1px solid var(--mm-border)",
+                  borderRadius: 8,
+                  marginTop: 14,
+                  padding: 14,
+                }}
+              >
+                <div className="mm-spread" style={{ alignItems: "flex-start" }}>
+                  <div>
+                    <div className="mm-card-title" style={{ marginBottom: 6 }}>
+                      {t("mailboxes.localArchive")}
+                    </div>
+                    <div className="mm-row" style={{ gap: 8 }}>
+                      <Badge tone={archiveStatusTone(archiveState.status)} dot>
+                        {statusLabel(archiveState.status)}
+                      </Badge>
+                      <span className="mm-muted" style={{ fontSize: 12 }}>
+                        {t("mailboxes.archiveSynced")
+                          .replace(
+                            "{{count}}",
+                            String(archiveState.total_synced_count ?? 0),
+                          )
+                          .replace("{{batches}}", String(archiveState.batch_count ?? 0))}
+                      </span>
+                    </div>
+                    <div
+                      className="mm-grid mm-grid-3"
+                      style={{ marginTop: 12, fontSize: 13 }}
+                    >
+                      <ArchiveDatum
+                        label={t("mailboxes.archiveNewest")}
+                        value={formatArchiveValue(archiveState.newest_synced_at)}
+                      />
+                      <ArchiveDatum
+                        label={t("mailboxes.archiveOldest")}
+                        value={formatArchiveValue(archiveState.oldest_synced_at)}
+                      />
+                      <ArchiveDatum
+                        label={t("mailboxes.archiveUpdated")}
+                        value={formatArchiveValue(
+                          archiveState.completed_at ??
+                            archiveState.last_batch_completed_at ??
+                            archiveState.started_at ??
+                            null,
+                        )}
+                      />
+                    </div>
+                    <p className="mm-muted" style={{ fontSize: 12, marginTop: 10 }}>
+                      {archiveHint(archiveState, t)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="mm-btn"
+                    onClick={() => void onArchiveMailbox(mailbox)}
+                    disabled={archiveDisabled}
+                    aria-disabled={archiveDisabled}
+                    style={actionButtonStyle(archiveDisabled)}
+                  >
+                    {archivingMailboxId === mailbox.id
+                      ? t("common.working")
+                      : archiveButtonLabel(archiveState, t)}
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -974,4 +1122,49 @@ export default function MailboxSettingsPage() {
       </PageFrame>
     </AppShell>
   );
+}
+
+function ArchiveDatum({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mm-muted" style={{ fontSize: 12 }}>
+        {label}
+      </div>
+      <div style={{ marginTop: 2, overflowWrap: "anywhere" }}>{value}</div>
+    </div>
+  );
+}
+
+function archiveHint(state: MailboxArchiveState, t: TFunction): string {
+  if (state.last_error_message) {
+    return state.last_error_message;
+  }
+
+  switch (state.status) {
+    case "not_started":
+      return t("mailboxes.archiveNotStartedHint");
+    case "running":
+      return t("mailboxes.archiveRunningHint");
+    case "partial":
+      return t("mailboxes.archivePartialHint");
+    case "complete":
+      return t("mailboxes.archiveCompleteHint");
+    case "failed":
+      return t("mailboxes.archiveFailedHint");
+    default:
+      return t("mailboxes.archiveUnknownHint");
+  }
+}
+
+function formatArchiveValue(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
 }

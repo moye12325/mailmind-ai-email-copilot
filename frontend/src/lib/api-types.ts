@@ -106,6 +106,25 @@ export interface MailboxProviderConfig {
   use_ssl?: boolean;
 }
 
+export interface MailboxArchiveState {
+  mailbox_id?: string | null;
+  status: "not_started" | "running" | "partial" | "complete" | "failed" | "canceled" | string;
+  is_complete: boolean;
+  total_synced_count: number;
+  batch_count: number;
+  newest_synced_at: string | null;
+  oldest_synced_at: string | null;
+  last_error_code?: string | null;
+  last_error_message?: string | null;
+  started_at?: string | null;
+  last_batch_started_at?: string | null;
+  last_batch_completed_at?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  message?: string;
+}
+
 export type MailboxStatus =
   | "connected"
   | "disconnected"
@@ -131,6 +150,7 @@ export interface Mailbox {
   capabilities?: MailboxCapabilities;
   imap_config?: ImapMailboxConfig;
   sync_cursor: string | null;
+  archive_state?: MailboxArchiveState;
   created_at: string;
   updated_at: string;
 }
@@ -214,6 +234,7 @@ export type JobStatus =
 
 export type JobType =
   | "email_sync"
+  | "email_archive_backfill"
   | "digest_generate"
   | "digest_refresh"
   | "scheduled_email_sync"
@@ -247,6 +268,13 @@ export interface JobData {
 
 export type JobResponse = ApiSuccess<JobData>;
 export type MailboxSyncJobResponse = JobResponse;
+export type MailboxArchiveJobResponse = ApiSuccess<{
+  job: Job;
+  archive_state: MailboxArchiveState;
+}>;
+export type MailboxArchiveStateResponse = ApiSuccess<{
+  archive_state: MailboxArchiveState;
+}>;
 
 export interface JobsPagination {
   limit: number;
@@ -282,21 +310,33 @@ export interface EmailBase {
   id: string;
   mailbox_id: string;
   provider: string;
+  mailbox_email?: string | null;
+  mailbox_display_name?: string | null;
   external_id: string;
   thread_id: string;
   subject: string | null;
+  sender_name?: string | null;
   sender: string;
+  sender_email?: string | null;
   recipients: string[];
+  cc?: string[];
   snippet: string | null;
   received_at: string;
+  sent_at?: string | null;
   is_read: boolean;
+  is_starred?: boolean;
+  has_attachments?: boolean;
   labels: string[];
+  body_cache_status?: string;
 }
 
 export type EmailSummary = EmailBase;
 
 export interface EmailDetail extends EmailBase {
   body_text: string | null;
+  body_html?: string | null;
+  body_cached_at?: string | null;
+  body_cache_source?: string | null;
 }
 
 export type EmailMutation = Partial<EmailDetail> & { id: string };
@@ -306,6 +346,42 @@ export interface TodayEmailsData {
 }
 
 export type TodayEmailsResponse = ApiSuccess<TodayEmailsData>;
+
+export type EmailRange =
+  | "today"
+  | "last_7_days"
+  | "last_30_days"
+  | "custom"
+  | "all_synced";
+
+export interface EmailListQuery {
+  limit?: number;
+  offset?: number;
+  is_read?: boolean;
+  mailbox_id?: string;
+  range?: EmailRange;
+  from?: string;
+  to?: string;
+  q?: string;
+  sort?: "received_at_desc" | "received_at_asc";
+}
+
+export interface EmailsPagination {
+  limit: number;
+  offset: number;
+  count: number;
+  total: number;
+  has_more: boolean;
+}
+
+export interface EmailsData {
+  emails: EmailSummary[];
+  pagination: EmailsPagination;
+  range: EmailRange | string;
+  archive_state: MailboxArchiveState;
+}
+
+export type EmailsResponse = ApiSuccess<EmailsData>;
 
 export interface EmailData {
   email: EmailDetail;

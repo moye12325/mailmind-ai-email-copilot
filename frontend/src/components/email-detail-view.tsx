@@ -32,6 +32,12 @@ export function EmailDetailView({
   const bodyText = displayBodyText(email.body_text, email.snippet);
   const hasStoredBody = (email.body_text?.trim() ?? "").length > 0;
   const labels = email.labels.length > 0 ? email.labels.join(", ") : t("emails.noLabels");
+  const mailboxLabel =
+    email.mailbox_display_name || email.mailbox_email || email.mailbox_id;
+  const bodyStatus =
+    email.body_cache_status === "cached"
+      ? t("emails.bodyCached")
+      : t("emails.bodyNotCached");
 
   return (
     <div className="mm-stack">
@@ -54,8 +60,14 @@ export function EmailDetailView({
         >
           <Metadata label={t("emails.recipients")} value={formatRecipients(email.recipients)} />
           <Metadata label={t("emails.received")} value={formatEmailDateTime(email.received_at)} />
+          <Metadata label={t("emails.mailbox")} value={mailboxLabel} />
           <Metadata label={t("emails.provider")} value={email.provider} />
+          <Metadata label={t("emails.bodyCacheStatus")} value={bodyStatus} />
           <Metadata label={t("emails.labels")} value={labels} />
+          <Metadata
+            label={t("emails.attachments")}
+            value={email.has_attachments ? t("common.yes") : t("common.no")}
+          />
         </div>
 
         <div style={{ marginTop: 16 }}>

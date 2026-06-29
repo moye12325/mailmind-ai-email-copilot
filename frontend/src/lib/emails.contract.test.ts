@@ -35,7 +35,16 @@ type ParseEmailReadFilterParameters = Assert<
 type BuildEmailListHrefParameters = Assert<
   Equal<
     Parameters<typeof buildEmailListHref>,
-    [{ filter?: string | null; mailboxId?: string | null; query?: string | null }]
+    [
+      {
+        filter?: string | null;
+        mailboxId?: string | null;
+        query?: string | null;
+        range?: string | null;
+        from?: string | null;
+        to?: string | null;
+      },
+    ]
   >
 >;
 type BuildEmailListHrefSignature = Assert<

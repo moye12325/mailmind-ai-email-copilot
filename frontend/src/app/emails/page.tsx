@@ -15,12 +15,13 @@ import { EmailEmptyState } from "@/components/email-empty-state";
 import { useAuth } from "@/lib/auth";
 import {
   listMailboxes,
-  listTodayEmails,
+  listEmails,
   markEmailRead,
   markEmailUnread,
 } from "@/lib/api-client";
-import type { EmailSummary, Mailbox } from "@/lib/api-types";
+import type { EmailRange, EmailSummary, Mailbox, MailboxArchiveState } from "@/lib/api-types";
 import {
+  EMAIL_RANGE_FILTERS,
   EMAIL_READ_FILTERS,
   buildEmailListHref,
   emailErrorView,
@@ -28,11 +29,13 @@ import {
   filterEmailsByMailbox,
   filterEmailsByQuery,
   mergeEmailMutation,
+  parseEmailRangeFilter,
   parseEmailReadFilter,
   type EmailErrorView,
+  type EmailRangeFilter,
   type EmailReadFilter,
 } from "@/lib/emails";
-import { useI18n } from "@/i18n/provider";
+import { useI18n, type TranslationKey } from "@/i18n/provider";
 import { MailboxProviderBadge } from "@/components/mailbox-provider-badge";
 
 type EmailsPageState =
@@ -49,9 +52,14 @@ export default function EmailsTodayPage() {
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [filter, setFilter] = useState<EmailReadFilter>("all");
+  const [rangeFilter, setRangeFilter] = useState<EmailRangeFilter>("today");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [mailboxFilter, setMailboxFilter] = useState("");
-  const [mailboxParamProvided, setMailboxParamProvided] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [pagination, setPagination] = useState({ total: 0, hasMore: false });
+  const [archiveState, setArchiveState] = useState<MailboxArchiveState | null>(null);
   const [urlStateLoaded, setUrlStateLoaded] = useState(false);
   const [pageError, setPageError] = useState<EmailErrorView | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -109,35 +117,28 @@ export default function EmailsTodayPage() {
     [filteredEmails, mailboxFilter, mailboxesById],
   );
   const listHref = useMemo(
-    () => buildEmailListHref({ filter, mailboxId: mailboxFilter, query: searchQuery }),
-    [filter, mailboxFilter, searchQuery],
+    () =>
+      buildEmailListHref({
+        filter,
+        mailboxId: mailboxFilter,
+        query: searchQuery,
+        range: rangeFilter,
+        from: customFrom,
+        to: customTo,
+      }),
+    [customFrom, customTo, filter, mailboxFilter, rangeFilter, searchQuery],
   );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setFilter(parseEmailReadFilter(params.get("filter")));
-    const mailboxParam = params.get("mailbox");
-    setMailboxFilter(mailboxParam ?? "");
-    setMailboxParamProvided(mailboxParam !== null);
+    setRangeFilter(parseEmailRangeFilter(params.get("range")));
+    setCustomFrom(params.get("from") ?? "");
+    setCustomTo(params.get("to") ?? "");
+    setMailboxFilter(params.get("mailbox") ?? "");
     setSearchQuery(params.get("q") ?? "");
     setUrlStateLoaded(true);
   }, []);
-
-  useEffect(() => {
-    if (pageState !== "loaded" || mailboxParamProvided || mailboxFilter) {
-      return;
-    }
-
-    const defaultMailbox = [...mailboxes].sort((left, right) => {
-      const leftTime = new Date(left.last_successful_sync_at ?? left.updated_at).getTime();
-      const rightTime = new Date(right.last_successful_sync_at ?? right.updated_at).getTime();
-      return rightTime - leftTime;
-    })[0];
-
-    if (defaultMailbox) {
-      setMailboxFilter(defaultMailbox.id);
-    }
-  }, [mailboxFilter, mailboxParamProvided, mailboxes, pageState]);
 
   useEffect(() => {
     if (!urlStateLoaded) {
@@ -147,24 +148,50 @@ export default function EmailsTodayPage() {
     window.history.replaceState(null, "", listHref);
   }, [listHref, urlStateLoaded]);
 
+  useEffect(() => {
+    if (!urlStateLoaded) {
+      return;
+    }
+
+    setOffset(0);
+  }, [customFrom, customTo, filter, mailboxFilter, rangeFilter, searchQuery, urlStateLoaded]);
+
   const loadEmails = useCallback(async (): Promise<boolean> => {
     setPageState("loading");
     setPageError(null);
     setActionError(null);
 
     try {
+      const readFilter =
+        filter === "read" ? true : filter === "unread" ? false : undefined;
       const [emailResponse, mailboxResponse] = await Promise.all([
-        listTodayEmails(),
+        listEmails({
+          limit: 25,
+          offset,
+          is_read: readFilter,
+          mailbox_id: mailboxFilter || undefined,
+          range: rangeFilter as EmailRange,
+          from: rangeFilter === "custom" ? customFrom || undefined : undefined,
+          to: rangeFilter === "custom" ? customTo || undefined : undefined,
+          q: searchQuery.trim() || undefined,
+          sort: "received_at_desc",
+        }),
         listMailboxes(),
       ]);
       setEmails(emailResponse.data.emails);
       setMailboxes(mailboxResponse.data.mailboxes);
+      setPagination({
+        total: emailResponse.data.pagination.total,
+        hasMore: emailResponse.data.pagination.has_more,
+      });
+      setArchiveState(emailResponse.data.archive_state);
       setPageState("loaded");
       return true;
     } catch (error) {
       const view = emailErrorView(error);
       setEmails([]);
       setMailboxes([]);
+      setArchiveState(null);
       setPageError(view);
       setPageState(
         view.kind === "unauthorized"
@@ -175,7 +202,7 @@ export default function EmailsTodayPage() {
       );
       return false;
     }
-  }, []);
+  }, [customFrom, customTo, filter, mailboxFilter, offset, rangeFilter, searchQuery]);
 
   useEffect(() => {
     if (authStatus === "loading") {
@@ -243,6 +270,70 @@ export default function EmailsTodayPage() {
     }
   }
 
+  function renderArchiveBanner() {
+    if (pageState !== "loaded" || mailboxes.length === 0 || !archiveState) {
+      return null;
+    }
+
+    return (
+      <div style={{ marginTop: 14 }}>
+        <InlineFeedback
+          tone={archiveStateTone(archiveState)}
+          title={t("emails.localArchive")}
+        >
+          {archiveStateMessage(archiveState, t)}
+        </InlineFeedback>
+      </div>
+    );
+  }
+
+  function renderPagination() {
+    if (pageState !== "loaded" || pagination.total <= 25) {
+      return null;
+    }
+
+    const start = pagination.total === 0 ? 0 : offset + 1;
+    const end = Math.min(offset + filteredEmails.length, pagination.total);
+
+    return (
+      <div
+        className="mm-spread"
+        style={{
+          borderTop: "1px solid var(--mm-border)",
+          marginTop: 16,
+          paddingTop: 14,
+        }}
+      >
+        <span className="mm-muted" style={{ fontSize: 13 }}>
+          {t("emails.paginationSummary")
+            .replace("{{start}}", String(start))
+            .replace("{{end}}", String(end))
+            .replace("{{total}}", String(pagination.total))}
+        </span>
+        <div className="mm-row">
+          <button
+            type="button"
+            className="mm-btn"
+            onClick={() => setOffset((current) => Math.max(0, current - 25))}
+            disabled={offset === 0}
+            aria-disabled={offset === 0}
+          >
+            {t("emails.previousPage")}
+          </button>
+          <button
+            type="button"
+            className="mm-btn"
+            onClick={() => setOffset((current) => current + 25)}
+            disabled={!pagination.hasMore}
+            aria-disabled={!pagination.hasMore}
+          >
+            {t("emails.nextPage")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function renderContent() {
     if (pageState === "loading") {
       return <EmailLoadingState />;
@@ -284,10 +375,11 @@ export default function EmailsTodayPage() {
     }
 
     if (emails.length === 0) {
+      const emptyCopy = emptyArchiveCopy(archiveState, t);
       return (
         <EmailEmptyState
-          title={t("emails.noTodayTitle")}
-          hint={t("emails.noTodayHint")}
+          title={emptyCopy.title}
+          hint={emptyCopy.hint}
           action={
             <button type="button" className="mm-btn" onClick={onRefresh}>
               {t("common.refresh")}
@@ -358,7 +450,6 @@ export default function EmailsTodayPage() {
                   className="mm-input"
                   value={mailboxFilter}
                   onChange={(event) => {
-                    setMailboxParamProvided(true);
                     setMailboxFilter(event.target.value);
                   }}
                   style={{ minWidth: 220 }}
@@ -372,8 +463,27 @@ export default function EmailsTodayPage() {
                   ))}
                 </select>
               </label>
+              <label className="mm-field" style={{ marginBottom: 0 }}>
+                <span className="mm-label">{t("emails.timeRange")}</span>
+                <select
+                  className="mm-input"
+                  value={rangeFilter}
+                  onChange={(event) =>
+                    setRangeFilter(event.target.value as EmailRangeFilter)
+                  }
+                  style={{ minWidth: 180 }}
+                >
+                  {EMAIL_RANGE_FILTERS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {rangeLabel(option.value, t)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Badge tone="neutral" dot>
-                {t("emails.shown").replace("{{count}}", String(filteredEmails.length))}
+                {t("emails.shown")
+                  .replace("{{count}}", String(filteredEmails.length))
+                  .replace("{{total}}", String(pagination.total))}
               </Badge>
             </div>
             <button
@@ -387,6 +497,29 @@ export default function EmailsTodayPage() {
             </button>
           </div>
 
+          {rangeFilter === "custom" ? (
+            <div className="mm-row" style={{ marginTop: 14, gap: 12 }}>
+              <label className="mm-field" style={{ marginBottom: 0 }}>
+                <span className="mm-label">{t("emails.rangeFrom")}</span>
+                <input
+                  className="mm-input"
+                  type="date"
+                  value={customFrom}
+                  onChange={(event) => setCustomFrom(event.target.value)}
+                />
+              </label>
+              <label className="mm-field" style={{ marginBottom: 0 }}>
+                <span className="mm-label">{t("emails.rangeTo")}</span>
+                <input
+                  className="mm-input"
+                  type="date"
+                  value={customTo}
+                  onChange={(event) => setCustomTo(event.target.value)}
+                />
+              </label>
+            </div>
+          ) : null}
+
           {selectedMailbox ? (
             <div className="mm-row" style={{ marginTop: 12, gap: 8 }}>
               <MailboxProviderBadge provider={selectedMailbox.provider} />
@@ -399,6 +532,8 @@ export default function EmailsTodayPage() {
               {t("emails.allSourceHint")}
             </p>
           ) : null}
+
+          {renderArchiveBanner()}
 
           {actionError ? (
             <div style={{ marginTop: 14 }}>
@@ -427,9 +562,8 @@ export default function EmailsTodayPage() {
                     <button
                       key={mailbox.id}
                       type="button"
-                      className="mm-btn"
-                      onClick={() => {
-                        setMailboxParamProvided(true);
+                        className="mm-btn"
+                        onClick={() => {
                         setMailboxFilter(mailbox.id);
                       }}
                       style={{
@@ -448,7 +582,6 @@ export default function EmailsTodayPage() {
                   type="button"
                   className="mm-btn"
                   onClick={() => {
-                    setMailboxParamProvided(true);
                     setMailboxFilter("");
                   }}
                   style={{
@@ -462,12 +595,126 @@ export default function EmailsTodayPage() {
                 </button>
               </div>
             </section>
-            <div>{renderContent()}</div>
+            <div>
+              {renderContent()}
+              {renderPagination()}
+            </div>
           </div>
         ) : (
-          renderContent()
+          <>
+            {renderContent()}
+            {renderPagination()}
+          </>
         )}
       </PageFrame>
     </AppShell>
   );
+}
+
+type TFunction = (key: TranslationKey) => string;
+
+function rangeLabel(value: EmailRangeFilter, t: TFunction): string {
+  switch (value) {
+    case "today":
+      return t("emails.rangeToday");
+    case "last_7_days":
+      return t("emails.rangeLast7");
+    case "last_30_days":
+      return t("emails.rangeLast30");
+    case "custom":
+      return t("emails.rangeCustom");
+    case "all_synced":
+      return t("emails.rangeAllSynced");
+  }
+}
+
+function archiveStateTone(state: MailboxArchiveState): "info" | "success" | "warning" | "danger" {
+  switch (state.status) {
+    case "complete":
+      return "success";
+    case "failed":
+      return "danger";
+    case "not_started":
+      return "warning";
+    case "running":
+    case "partial":
+      return "info";
+    default:
+      return "info";
+  }
+}
+
+function archiveStateMessage(
+  state: MailboxArchiveState,
+  t: TFunction,
+): string {
+  const synced = String(state.total_synced_count ?? 0);
+  const base =
+    state.message ??
+    (state.status === "not_started"
+      ? t("emails.archiveNotStarted")
+      : state.status === "running"
+        ? t("emails.archiveRunning")
+        : state.status === "partial"
+          ? t("emails.archivePartial")
+          : state.status === "failed"
+            ? t("emails.archiveFailed")
+            : state.status === "complete"
+              ? t("emails.archiveComplete")
+              : t("emails.archiveUnknown"));
+  const range =
+    state.oldest_synced_at || state.newest_synced_at
+      ? ` ${t("emails.archiveRange")
+          .replace("{{oldest}}", formatArchiveDate(state.oldest_synced_at))
+          .replace("{{newest}}", formatArchiveDate(state.newest_synced_at))}`
+      : "";
+  const error = state.last_error_message ? ` ${state.last_error_message}` : "";
+
+  return `${base} ${t("emails.archiveSynced")
+    .replace("{{count}}", synced)
+    .replace("{{batches}}", String(state.batch_count ?? 0))}${range}${error}`;
+}
+
+function emptyArchiveCopy(
+  state: MailboxArchiveState | null,
+  t: TFunction,
+): { title: string; hint: string } {
+  if (state?.status === "not_started") {
+    return {
+      title: t("emails.archiveNotStartedTitle"),
+      hint: t("emails.archiveNotStartedHint"),
+    };
+  }
+
+  if (state?.status === "running" || state?.status === "partial") {
+    return {
+      title: t("emails.archiveIncompleteTitle"),
+      hint: t("emails.archiveIncompleteHint"),
+    };
+  }
+
+  if (state?.status === "failed") {
+    return {
+      title: t("emails.archiveFailedTitle"),
+      hint: state.last_error_message ?? t("emails.archiveFailedHint"),
+    };
+  }
+
+  return {
+    title: t("emails.noRangeTitle"),
+    hint: t("emails.noRangeHint"),
+  };
+}
+
+function formatArchiveDate(value: string | null | undefined): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
 }

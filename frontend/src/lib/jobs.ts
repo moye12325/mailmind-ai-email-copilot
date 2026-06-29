@@ -38,6 +38,22 @@ export function jobStatusTone(job: Job): BadgeTone {
 }
 
 export function statusLabel(value: string): string {
+  if (value === "email_archive_backfill") {
+    return "Archive full history";
+  }
+
+  if (value === "email_sync") {
+    return "Email sync";
+  }
+
+  if (value === "digest_generate") {
+    return "Generate digest";
+  }
+
+  if (value === "digest_refresh") {
+    return "Refresh digest";
+  }
+
   return value.replaceAll("_", " ");
 }
 

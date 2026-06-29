@@ -12,8 +12,10 @@ import {
   getMailbox,
   getMailboxSyncStatus,
   getTodayDigest,
+  getMailboxArchiveState,
   listJobs,
   listActions,
+  listEmails,
   listMailboxes,
   listTodayEmails,
   markEmailRead,
@@ -24,6 +26,7 @@ import {
   retryJob,
   snoozeDigestItem,
   startGmailLogin,
+  triggerMailboxArchiveJob,
   triggerMailboxSync,
   triggerMailboxSyncJob,
 } from "./api-client";
@@ -33,6 +36,8 @@ import type {
   DigestScopeRequest,
   DigestResponse,
   EmailMutationResponse,
+  EmailListQuery,
+  EmailsResponse,
   EmailResponse,
   TodayEmailsResponse,
   GmailLoginResponse,
@@ -42,6 +47,8 @@ import type {
   JobListQuery,
   JobsResponse,
   MailboxResponse,
+  MailboxArchiveJobResponse,
+  MailboxArchiveStateResponse,
   MailboxSyncJobResponse,
   MailboxSyncResponse,
   MailboxSyncStatusResponse,
@@ -72,7 +79,16 @@ type ImapRoutesMatchResolvedContract = Assert<
   Equal<ImapAuthRouteKeys, "connect">
 >;
 type MailboxRoutesMatchResolvedContract = Assert<
-  Equal<MailboxRouteKeys, "list" | "byId" | "syncStatus" | "sync" | "syncJobs">
+  Equal<
+    MailboxRouteKeys,
+    | "list"
+    | "byId"
+    | "syncStatus"
+    | "sync"
+    | "syncJobs"
+    | "archiveJobs"
+    | "archiveState"
+  >
 >;
 type DigestRoutesMatchResolvedContract = Assert<
   Equal<
@@ -108,6 +124,10 @@ const mailboxSyncPath: "/api/mailboxes/mailbox-id/sync" =
   API_ROUTES.mailboxes.sync("mailbox-id");
 const mailboxSyncJobsPath: "/api/mailboxes/mailbox-id/sync-jobs" =
   API_ROUTES.mailboxes.syncJobs("mailbox-id");
+const mailboxArchiveJobsPath: "/api/mailboxes/mailbox-id/archive-jobs" =
+  API_ROUTES.mailboxes.archiveJobs("mailbox-id");
+const mailboxArchiveStatePath: "/api/mailboxes/mailbox-id/archive-state" =
+  API_ROUTES.mailboxes.archiveState("mailbox-id");
 const todayDigestPath: "/api/digest/today" = API_ROUTES.digest.today;
 const generateTodayDigestPath: "/api/digest/today/generate" =
   API_ROUTES.digest.todayGenerate;
@@ -126,6 +146,7 @@ const digestItemDismissPath: "/api/digest/items/item-id/dismiss" =
 const digestItemSnoozePath: "/api/digest/items/item-id/snooze" =
   API_ROUTES.digest.itemSnooze("item-id");
 const todayEmailsPath: "/api/emails/today" = API_ROUTES.emails.today;
+const emailsListPath: "/api/emails" = API_ROUTES.emails.list;
 const emailDetailPath: "/api/emails/email-id" =
   API_ROUTES.emails.byId("email-id");
 const emailMarkReadPath: "/api/emails/email-id/mark-read" =
@@ -171,6 +192,24 @@ type TriggerMailboxSyncJobParameters = Assert<
 >;
 type TriggerMailboxSyncJobSignature = Assert<
   Equal<ReturnType<typeof triggerMailboxSyncJob>, Promise<MailboxSyncJobResponse>>
+>;
+type TriggerMailboxArchiveJobParameters = Assert<
+  Equal<Parameters<typeof triggerMailboxArchiveJob>, [mailboxId: string]>
+>;
+type TriggerMailboxArchiveJobSignature = Assert<
+  Equal<
+    ReturnType<typeof triggerMailboxArchiveJob>,
+    Promise<MailboxArchiveJobResponse>
+  >
+>;
+type GetMailboxArchiveStateParameters = Assert<
+  Equal<Parameters<typeof getMailboxArchiveState>, [mailboxId: string]>
+>;
+type GetMailboxArchiveStateSignature = Assert<
+  Equal<
+    ReturnType<typeof getMailboxArchiveState>,
+    Promise<MailboxArchiveStateResponse>
+  >
 >;
 type StartGmailLoginSignature = Assert<
   Equal<ReturnType<typeof startGmailLogin>, Promise<GmailLoginResponse>>
@@ -247,6 +286,12 @@ type SnoozeDigestItemSignature = Assert<
 type ListTodayEmailsSignature = Assert<
   Equal<ReturnType<typeof listTodayEmails>, Promise<TodayEmailsResponse>>
 >;
+type ListEmailsParameters = Assert<
+  Equal<Parameters<typeof listEmails>, [query?: EmailListQuery]>
+>;
+type ListEmailsSignature = Assert<
+  Equal<ReturnType<typeof listEmails>, Promise<EmailsResponse>>
+>;
 type GetEmailParameters = Assert<Equal<Parameters<typeof getEmail>, [emailId: string]>>;
 type GetEmailSignature = Assert<
   Equal<ReturnType<typeof getEmail>, Promise<EmailResponse>>
@@ -303,6 +348,10 @@ type ContractAssertions = [
   TriggerMailboxSyncSignature,
   TriggerMailboxSyncJobParameters,
   TriggerMailboxSyncJobSignature,
+  TriggerMailboxArchiveJobParameters,
+  TriggerMailboxArchiveJobSignature,
+  GetMailboxArchiveStateParameters,
+  GetMailboxArchiveStateSignature,
   StartGmailLoginSignature,
   DisconnectGmailSignature,
   ConnectImapParameters,
@@ -326,6 +375,8 @@ type ContractAssertions = [
   SnoozeDigestItemParameters,
   SnoozeDigestItemSignature,
   ListTodayEmailsSignature,
+  ListEmailsParameters,
+  ListEmailsSignature,
   GetEmailParameters,
   GetEmailSignature,
   MarkEmailReadParameters,
@@ -397,6 +448,12 @@ const contractAssertions: ContractAssertions = [
   true,
   true,
   true,
+  true,
+  true,
+  true,
+  true,
+  true,
+  true,
 ];
 
 void contractAssertions;
@@ -408,6 +465,8 @@ void mailboxDetailPath;
 void mailboxSyncStatusPath;
 void mailboxSyncPath;
 void mailboxSyncJobsPath;
+void mailboxArchiveJobsPath;
+void mailboxArchiveStatePath;
 void todayDigestPath;
 void generateTodayDigestPath;
 void generateTodayDigestJobPath;
@@ -418,6 +477,7 @@ void digestItemMarkDonePath;
 void digestItemDismissPath;
 void digestItemSnoozePath;
 void todayEmailsPath;
+void emailsListPath;
 void emailDetailPath;
 void emailMarkReadPath;
 void emailMarkUnreadPath;

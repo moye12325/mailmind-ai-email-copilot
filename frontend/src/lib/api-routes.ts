@@ -53,6 +53,7 @@ export const API_ROUTES = {
 
   // Section 4 — Email API (/api/emails)
   emails: {
+    list: "/api/emails",
     today: "/api/emails/today",
     new: "/api/emails/new",
     byId: <TEmailId extends string>(emailId: TEmailId) =>
@@ -74,6 +75,10 @@ export const API_ROUTES = {
       `/api/mailboxes/${mailboxId}/sync` as const,
     syncJobs: <TMailboxId extends string>(mailboxId: TMailboxId) =>
       `/api/mailboxes/${mailboxId}/sync-jobs` as const,
+    archiveJobs: <TMailboxId extends string>(mailboxId: TMailboxId) =>
+      `/api/mailboxes/${mailboxId}/archive-jobs` as const,
+    archiveState: <TMailboxId extends string>(mailboxId: TMailboxId) =>
+      `/api/mailboxes/${mailboxId}/archive-state` as const,
   },
 
   // Section 6 — Job API (/api/jobs)

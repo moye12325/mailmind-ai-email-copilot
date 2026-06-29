@@ -1,7 +1,8 @@
 import { ApiRequestError } from "./api-client";
-import type { EmailMutation, EmailSummary } from "./api-types";
+import type { EmailMutation, EmailRange, EmailSummary } from "./api-types";
 
 export type EmailReadFilter = "all" | "unread" | "read";
+export type EmailRangeFilter = EmailRange;
 
 export type EmailErrorKind =
   | "unauthorized"
@@ -23,6 +24,17 @@ export const EMAIL_READ_FILTERS: Array<{
   { value: "all", label: "All" },
   { value: "unread", label: "Unread" },
   { value: "read", label: "Read" },
+];
+
+export const EMAIL_RANGE_FILTERS: Array<{
+  value: EmailRangeFilter;
+  label: string;
+}> = [
+  { value: "today", label: "Today" },
+  { value: "last_7_days", label: "Last 7 Days" },
+  { value: "last_30_days", label: "Last 30 Days" },
+  { value: "custom", label: "Custom Range" },
+  { value: "all_synced", label: "All Synced" },
 ];
 
 export function emailErrorView(error: unknown): EmailErrorView {
@@ -96,6 +108,19 @@ export function parseEmailReadFilter(value: string | null): EmailReadFilter {
   return value === "read" || value === "unread" ? value : "all";
 }
 
+export function parseEmailRangeFilter(value: string | null): EmailRangeFilter {
+  if (
+    value === "today" ||
+    value === "last_7_days" ||
+    value === "last_30_days" ||
+    value === "custom" ||
+    value === "all_synced"
+  ) {
+    return value;
+  }
+  return "today";
+}
+
 export function filterEmailsByQuery(
   emails: EmailSummary[],
   query: string,
@@ -131,10 +156,16 @@ export function buildEmailListHref({
   filter,
   mailboxId,
   query,
+  range,
+  from,
+  to,
 }: {
   filter?: string | null;
   mailboxId?: string | null;
   query?: string | null;
+  range?: string | null;
+  from?: string | null;
+  to?: string | null;
 }): string {
   const params = new URLSearchParams();
   const parsedFilter = parseEmailReadFilter(filter ?? null);
@@ -150,6 +181,19 @@ export function buildEmailListHref({
 
   if (mailboxId) {
     params.set("mailbox", mailboxId);
+  }
+
+  const parsedRange = parseEmailRangeFilter(range ?? null);
+  if (parsedRange !== "today") {
+    params.set("range", parsedRange);
+  }
+  if (parsedRange === "custom") {
+    if (from) {
+      params.set("from", from);
+    }
+    if (to) {
+      params.set("to", to);
+    }
   }
 
   const search = params.toString();

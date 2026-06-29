@@ -52,7 +52,11 @@ export default function EmailDetailPage() {
     setBackHref(
       buildEmailListHref({
         filter: params.get("filter"),
+        mailboxId: params.get("mailbox"),
         query: params.get("q"),
+        range: params.get("range"),
+        from: params.get("from"),
+        to: params.get("to"),
       }),
     );
   }, []);
