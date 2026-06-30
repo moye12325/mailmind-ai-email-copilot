@@ -134,6 +134,23 @@ Copy `.env.example` to `.env` (root) and `backend/.env.example` to `backend/.env
 
 ## Conventions
 
+### Git Commit Rules
+
+**Before every commit, perform these checks:**
+
+1. **Author consistency check:** Run `git log --format="%an <%ae>" -5` to inspect recent commit authors. Compare with `git config user.name` and `git config user.email`. If they differ, **stop and ask the user** whether to proceed or adjust identity.
+
+2. **No Claude in commits:** The commit message must not contain `Claude`, `Co-Authored-By: Claude`, `claude.ai`, or any reference to Claude/AI as a contributor. Verify with:
+   ```bash
+   git log -1 --format="%B" | grep -i "claude" && echo "BLOCKED: Claude reference found" || echo "OK"
+   ```
+
+3. **No secrets in diff:** Run `git diff --cached` and verify no tokens, API keys, or credentials are staged.
+
+These checks apply to all commits on all branches. Violations must be fixed before pushing.
+
+### Other Conventions
+
 - Backend uses `uv` (not pip) for Python dependency management
 - Frontend uses npm; `package-lock.json` is gitignored except in `desktop/`
 - All API endpoints return the `{ data, meta }` / `{ error }` envelope
