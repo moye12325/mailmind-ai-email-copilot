@@ -140,6 +140,54 @@ It syncs your email, runs it through an AI pipeline, and produces a structured D
 
 ---
 
+## Desktop Preview
+
+MailMind v0.7.0 provides an **Electron desktop shell** for Windows, macOS, and Linux.
+
+> **Note**: The desktop app is a thin wrapper around the web UI. It does **not** include the backend, database, or job queue. You must start MailMind services locally before launching the desktop app.
+
+| Component | Included in Desktop? |
+|---|---|
+| Electron shell | ✅ Yes |
+| Web UI loader | ✅ Yes |
+| Health check + fallback | ✅ Yes |
+| FastAPI backend | ❌ Run separately |
+| PostgreSQL | ❌ Run separately |
+| Redis | ❌ Run separately |
+| Celery worker | ❌ Run separately |
+
+### Usage
+
+```bash
+# 1. Start backend (in backend/)
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# 2. Start frontend (in frontend/)
+npm run dev
+
+# 3. Launch desktop app (in desktop/)
+npm install
+npm run dev
+```
+
+### Downloads
+
+Windows, macOS, and Linux installers are built automatically by GitHub Actions. Check the [Releases](https://github.com/nicobailon/mailmind-ai-email-copilot/releases) page for download links.
+
+### Building Installers Locally
+
+```bash
+cd desktop
+npm install
+npm run dist
+```
+
+See [`docs/desktop/DESKTOP_SHELL.md`](docs/desktop/DESKTOP_SHELL.md) for details.
+
+> **Roadmap**: v0.8 will introduce embedded Python runtime. v1.0 will be a full All-in-one desktop app. See [`docs/desktop/ALL_IN_ONE_ROADMAP.md`](docs/desktop/ALL_IN_ONE_ROADMAP.md).
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -327,13 +375,15 @@ npm run build
 | v0.5 Provider Mailbox Foundation | Multi-mailbox support, IMAP provider MVP, Celery reliability, digest scope |
 | v0.5.1 UI/UX Polish | 6 theme presets, light/dark mode, dramatic visual effects, Playwright verification |
 | v0.5.2 Demo Readiness | Architecture diagrams, demo script, project walkthrough, documentation refresh |
+| v0.7 Desktop Shell | Electron desktop shell, multi-platform installers, GitHub Actions auto-build |
 
 ### 🧭 Next
 
 | Version | Scope |
 |---------|-------|
-| v0.6 Open Source Ready | CI, Docker polish, public docs review |
-| v1.0 Personal Productivity | Stable daily driver for personal email management |
+| v0.8 Local Runtime Preview | Embedded Python, SQLite, APScheduler, offline-capable desktop |
+| v0.9 Embedded DB Prototype | Dual-dialect SQLAlchemy, import/export, data retention |
+| v1.0 All-in-one Desktop | Full offline, auto-update, OAuth deep links, code signing |
 
 ---
 
@@ -373,6 +423,11 @@ npm run build
 | v0.4.1 Release Notes | [`docs/release-notes/v0.4.1-config-sync-containment.md`](docs/release-notes/v0.4.1-config-sync-containment.md) |
 | v0.5 Release Notes | [`docs/release-notes/v0.5.0-provider-mailbox-foundation.md`](docs/release-notes/v0.5.0-provider-mailbox-foundation.md) |
 | v0.5.1 Release Notes | [`docs/release-notes/v0.5.1-ui-ux-polish.md`](docs/release-notes/v0.5.1-ui-ux-polish.md) |
+| Desktop Shell | [`docs/desktop/DESKTOP_SHELL.md`](docs/desktop/DESKTOP_SHELL.md) |
+| Desktop Release | [`docs/desktop/DESKTOP_RELEASE.md`](docs/desktop/DESKTOP_RELEASE.md) |
+| Desktop Security | [`docs/desktop/DESKTOP_SECURITY.md`](docs/desktop/DESKTOP_SECURITY.md) |
+| All-in-one Roadmap | [`docs/desktop/ALL_IN_ONE_ROADMAP.md`](docs/desktop/ALL_IN_ONE_ROADMAP.md) |
+| v0.7 Release Notes | [`docs/release-notes/v0.7.0-desktop-shell.md`](docs/release-notes/v0.7.0-desktop-shell.md) |
 
 ---
 
