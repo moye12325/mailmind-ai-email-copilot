@@ -1,7 +1,8 @@
 import { app, BrowserWindow, shell, Menu, ipcMain, Notification, Tray, nativeImage } from "electron";
 import * as path from "path";
 import { loadConfig } from "./config";
-import { getConnectionTransition } from "./connection-state";
+import { getConnectionNotification, getConnectionTransition } from "./connection-state";
+import { shouldHideToTray, shouldShowTrayHint } from "./tray-policy";
 import { loadWindowState, saveWindowState, type WindowBounds } from "./window-state";
 
 let mainWindow: BrowserWindow | null = null;
@@ -103,7 +104,7 @@ function createWindow(appUrl: string, healthUrl: string): void {
   });
 
   mainWindow.on("close", (event) => {
-    if (forceQuit || process.platform === "darwin") {
+    if (!shouldHideToTray(process.platform, forceQuit)) {
       return;
     }
 
@@ -332,7 +333,7 @@ function showNotification(title: string, body: string): void {
 }
 
 function showTrayHint(): void {
-  if (hasShownTrayHint) {
+  if (!shouldShowTrayHint(hasShownTrayHint)) {
     return;
   }
 
@@ -343,13 +344,9 @@ function showTrayHint(): void {
 function notifyConnectionTransition(healthy: boolean): void {
   const transition = getConnectionTransition(connectionHealthy, healthy);
   connectionHealthy = healthy;
-
-  if (transition === "recovered") {
-    showNotification("MailMind connected", "Local services are reachable again.");
-  }
-
-  if (transition === "lost") {
-    showNotification("MailMind disconnected", "Local services are no longer reachable.");
+  const notification = getConnectionNotification(transition);
+  if (notification) {
+    showNotification(notification.title, notification.body);
   }
 }
 

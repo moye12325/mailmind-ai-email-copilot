@@ -78,4 +78,5 @@ The current desktop shell adds the first desktop-native UX layer:
 - Window size, position, and maximized state are persisted in `userData/window-state.json`
 - Closing the main window hides the app to the system tray on Windows and Linux
 - The tray icon can show or hide the main window
+- The tray menu exposes `Show MailMind`, `Open Web App`, and `Quit`
 - The app can notify when local services disconnect or recover
