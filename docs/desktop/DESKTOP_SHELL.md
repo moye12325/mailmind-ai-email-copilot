@@ -59,6 +59,53 @@ Override via environment variables or place a `config.json` in the Electron `use
 2. `<userData>/config.json` (Electron `app.getPath("userData")`)
 3. Built-in defaults
 
+## v0.7.3 Config And Diagnostics
+
+The desktop shell now includes a desktop-only configuration and diagnostics layer.
+
+### Desktop Settings
+
+Users can open desktop settings from:
+
+- The application menu
+- The tray menu
+- The fallback page when MailMind services are unavailable
+- The main web UI route `/settings/desktop`
+
+The editable desktop settings are:
+
+- `appUrl`
+- `healthUrl`
+- `minimizeToTray`
+- `showWindowOnStartup`
+- `notificationsEnabled`
+
+These settings are stored in `<userData>/config.json`.
+
+### Diagnostics
+
+The desktop diagnostics snapshot includes:
+
+- App name and version
+- Current platform
+- Current `appUrl`
+- Current `healthUrl`
+- Desktop behavior flags
+- Latest connection check result
+- Desktop log directory
+
+Users can copy diagnostics, open the desktop log directory, and retry the connection check from both the fallback page and `/settings/desktop`.
+
+### Logging
+
+The Electron main process writes desktop runtime logs to:
+
+```text
+<userData>/logs/desktop.log
+```
+
+Logging failures do not crash the desktop shell.
+
 ## Current Limitations
 
 - Requires locally running backend and frontend
@@ -80,3 +127,14 @@ The current desktop shell adds the first desktop-native UX layer:
 - The tray icon can show or hide the main window
 - The tray menu exposes `Show MailMind`, `Open Web App`, and `Quit`
 - The app can notify when local services disconnect or recover
+
+## v0.7.3 Summary
+
+The current desktop shell now also adds:
+
+- Persistent desktop config for endpoints and shell behavior
+- A dedicated desktop settings window
+- A desktop settings route in the frontend shell
+- A richer offline fallback page with diagnostics actions
+- Copyable diagnostics output
+- Desktop log directory access and file logging from the Electron main process
