@@ -19,8 +19,36 @@
       </div>
 
       <h1>MailMind Desktop Preview</h1>
-
       <p class="subtitle">MailMind local services are not running.</p>
+
+      <div class="diagnostics-panel">
+        <div class="diagnostics-header">
+          <h2>Desktop Diagnostics</h2>
+          <span id="diag-status" class="status-chip">Checking...</span>
+        </div>
+        <dl class="diagnostics-list">
+          <div class="diagnostics-row">
+            <dt>Web App</dt>
+            <dd id="diag-app-url">-</dd>
+          </div>
+          <div class="diagnostics-row">
+            <dt>Health URL</dt>
+            <dd id="diag-health-url">-</dd>
+          </div>
+          <div class="diagnostics-row">
+            <dt>Last Check</dt>
+            <dd id="diag-last-check">-</dd>
+          </div>
+          <div class="diagnostics-row">
+            <dt>Detail</dt>
+            <dd id="diag-detail">-</dd>
+          </div>
+          <div class="diagnostics-row">
+            <dt>Logs</dt>
+            <dd id="diag-log-dir">-</dd>
+          </div>
+        </dl>
+      </div>
 
       <div class="instructions">
         <p class="instructions-title">Please start the following services:</p>
@@ -53,11 +81,16 @@
 
       <div class="actions">
         <button id="btn-retry" class="btn btn-primary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M2 8a6 6 0 0110.89-3.48M14 8a6 6 0 01-10.89 3.48" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
           Retry Connection
+        </button>
+        <button id="btn-open-settings" class="btn btn-secondary">
+          Desktop Settings
+        </button>
+        <button id="btn-copy-diagnostics" class="btn btn-secondary">
+          Copy Diagnostics
+        </button>
+        <button id="btn-open-logs" class="btn btn-secondary">
+          Open Logs
         </button>
         <button id="btn-open-web" class="btn btn-secondary">
           Open Web App
@@ -72,34 +105,111 @@
   </div>
 
   <script>
-    const btnRetry = document.getElementById('btn-retry');
-    const btnOpenWeb = document.getElementById('btn-open-web');
-    const btnOpenDocs = document.getElementById('btn-open-docs');
-    const statusText = document.getElementById('status-text');
+    const btnRetry = document.getElementById("btn-retry");
+    const btnOpenSettings = document.getElementById("btn-open-settings");
+    const btnCopyDiagnostics = document.getElementById("btn-copy-diagnostics");
+    const btnOpenLogs = document.getElementById("btn-open-logs");
+    const btnOpenWeb = document.getElementById("btn-open-web");
+    const btnOpenDocs = document.getElementById("btn-open-docs");
+    const statusText = document.getElementById("status-text");
 
-    btnRetry.addEventListener('click', async () => {
+    const diagStatus = document.getElementById("diag-status");
+    const diagAppUrl = document.getElementById("diag-app-url");
+    const diagHealthUrl = document.getElementById("diag-health-url");
+    const diagLastCheck = document.getElementById("diag-last-check");
+    const diagDetail = document.getElementById("diag-detail");
+    const diagLogDir = document.getElementById("diag-log-dir");
+
+    function setStatus(message) {
+      statusText.textContent = message;
+    }
+
+    function setStatusChip(healthy) {
+      diagStatus.className = healthy === true
+        ? "status-chip status-chip--ok"
+        : healthy === false
+          ? "status-chip status-chip--warn"
+          : "status-chip";
+
+      diagStatus.textContent = healthy === true
+        ? "Reachable"
+        : healthy === false
+          ? "Unavailable"
+          : "Unknown";
+    }
+
+    async function refreshDiagnostics() {
+      try {
+        const diagnostics = await window.electronAPI.getDesktopDiagnostics();
+        diagAppUrl.textContent = diagnostics.endpoints.appUrl;
+        diagHealthUrl.textContent = diagnostics.endpoints.healthUrl;
+        diagLastCheck.textContent = diagnostics.connection.checkedAt || "Not checked yet";
+        diagDetail.textContent = diagnostics.connection.detail;
+        diagLogDir.textContent = diagnostics.logDirectory;
+        setStatusChip(diagnostics.connection.healthy);
+      } catch (error) {
+        setStatusChip(null);
+        setStatus("Unable to load desktop diagnostics.");
+      }
+    }
+
+    btnRetry.addEventListener("click", async () => {
       btnRetry.disabled = true;
-      statusText.textContent = 'Checking connection...';
+      setStatus("Checking connection...");
       try {
         const ok = await window.electronAPI.retryConnection();
+        await refreshDiagnostics();
         if (!ok) {
-          statusText.textContent = 'Services are still unavailable. Please ensure backend and frontend are running.';
+          setStatus("Services are still unavailable. Please ensure backend and frontend are running.");
         }
-      } catch (e) {
-        statusText.textContent = 'Connection check failed.';
+      } catch {
+        setStatus("Connection check failed.");
       } finally {
         btnRetry.disabled = false;
       }
     });
 
-    btnOpenWeb.addEventListener('click', async () => {
-      const config = await window.electronAPI.getConfig();
-      window.electronAPI.openExternal(config.appUrl);
+    btnOpenSettings.addEventListener("click", async () => {
+      try {
+        await window.electronAPI.openDesktopSettings();
+        setStatus("Opened desktop settings.");
+      } catch {
+        setStatus("Unable to open desktop settings.");
+      }
     });
 
-    btnOpenDocs.addEventListener('click', () => {
-      window.electronAPI.openExternal('https://github.com/Vibe-Coding-X/mailmind-ai-email-copilot');
+    btnCopyDiagnostics.addEventListener("click", async () => {
+      try {
+        await window.electronAPI.copyDesktopDiagnostics();
+        setStatus("Diagnostics copied to clipboard.");
+      } catch {
+        setStatus("Unable to copy diagnostics.");
+      }
     });
+
+    btnOpenLogs.addEventListener("click", async () => {
+      try {
+        await window.electronAPI.openDesktopLogs();
+        setStatus("Opened desktop log directory.");
+      } catch {
+        setStatus("Unable to open desktop log directory.");
+      }
+    });
+
+    btnOpenWeb.addEventListener("click", async () => {
+      try {
+        const diagnostics = await window.electronAPI.getDesktopDiagnostics();
+        await window.electronAPI.openExternal(diagnostics.endpoints.appUrl);
+      } catch {
+        setStatus("Unable to open the configured web app.");
+      }
+    });
+
+    btnOpenDocs.addEventListener("click", () => {
+      window.electronAPI.openExternal("https://github.com/Vibe-Coding-X/mailmind-ai-email-copilot");
+    });
+
+    void refreshDiagnostics();
   </script>
 </body>
 </html>

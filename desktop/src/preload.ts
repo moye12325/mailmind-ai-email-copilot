@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopSettings } from "./config";
+import type { DesktopDiagnosticsSnapshot } from "./diagnostics";
 
 export interface AppInfo {
   name: string;
@@ -6,19 +8,47 @@ export interface AppInfo {
   platform: string;
 }
 
-export interface DesktopConfig {
-  appUrl: string;
-  healthUrl: string;
+export interface ElectronDesktopAPI {
+  getAppInfo(): Promise<AppInfo>;
+  getDesktopConfig(): Promise<DesktopSettings>;
+  saveDesktopConfig(input: DesktopSettings): Promise<DesktopSettings>;
+  getDesktopDiagnostics(): Promise<DesktopDiagnosticsSnapshot>;
+  retryConnection(): Promise<boolean>;
+  openExternal(url: string): Promise<void>;
+  openDesktopSettings(): Promise<void>;
+  openDesktopLogs(): Promise<void>;
+  copyDesktopDiagnostics(): Promise<string>;
 }
 
-contextBridge.exposeInMainWorld("electronAPI", {
+const electronAPI: ElectronDesktopAPI & {
+  getConfig(): Promise<DesktopSettings>;
+} = {
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke("get-app-info"),
 
-  getConfig: (): Promise<DesktopConfig> => ipcRenderer.invoke("get-config"),
+  getDesktopConfig: (): Promise<DesktopSettings> =>
+    ipcRenderer.invoke("desktop:get-config"),
 
-  retryConnection: (): Promise<boolean> =>
-    ipcRenderer.invoke("retry-connection"),
+  saveDesktopConfig: (input: DesktopSettings): Promise<DesktopSettings> =>
+    ipcRenderer.invoke("desktop:save-config", input),
 
-  openExternal: (url: string): Promise<void> =>
-    ipcRenderer.invoke("open-external", url),
-});
+  getDesktopDiagnostics: (): Promise<DesktopDiagnosticsSnapshot> =>
+    ipcRenderer.invoke("desktop:get-diagnostics"),
+
+  retryConnection: (): Promise<boolean> => ipcRenderer.invoke("retry-connection"),
+
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke("open-external", url),
+
+  openDesktopSettings: (): Promise<void> =>
+    ipcRenderer.invoke("desktop:open-settings-window"),
+
+  openDesktopLogs: (): Promise<void> => ipcRenderer.invoke("desktop:open-logs"),
+
+  copyDesktopDiagnostics: (): Promise<string> =>
+    ipcRenderer.invoke("desktop:copy-diagnostics"),
+
+  getConfig(): Promise<DesktopSettings> {
+    return ipcRenderer.invoke("desktop:get-config");
+  },
+};
+
+contextBridge.exposeInMainWorld("electronAPI", electronAPI);

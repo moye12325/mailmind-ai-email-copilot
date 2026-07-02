@@ -1,7 +1,24 @@
-import { app, BrowserWindow, shell, Menu, ipcMain, Notification, Tray, nativeImage } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  shell,
+  Tray,
+} from "electron";
 import * as path from "path";
-import { loadConfig } from "./config";
+import { type DesktopSettings, loadConfig, saveDesktopConfig } from "./config";
+import {
+  buildDesktopDiagnostics,
+  formatDesktopDiagnosticsText,
+  type DesktopConnectionSnapshot,
+} from "./diagnostics";
+import { createDesktopLogger, type DesktopLogger } from "./logger";
 import { getConnectionNotification, getConnectionTransition } from "./connection-state";
+import { openDesktopSettingsWindow } from "./settings-window";
 import { shouldHideToTray, shouldShowTrayHint } from "./tray-policy";
 import { loadWindowState, saveWindowState, type WindowBounds } from "./window-state";
 
@@ -10,33 +27,114 @@ let tray: Tray | null = null;
 let forceQuit = false;
 let hasShownTrayHint = false;
 let connectionHealthy: boolean | null = null;
+let desktopConfig: DesktopSettings;
+let logger: DesktopLogger;
 
 const APP_VERSION = app.getVersion();
 const APP_NAME = app.getName();
 const TRAY_TOOLTIP = "MailMind";
+const HEALTH_TIMEOUT_MS = 5000;
 
-// ---------------------------------------------------------------------------
-// Health check
-// ---------------------------------------------------------------------------
+let latestConnection: DesktopConnectionSnapshot = {
+  healthy: null,
+  checkedAt: null,
+  source: "startup",
+  detail: "Health check has not run yet.",
+};
 
-async function checkHealth(healthUrl: string, timeoutMs: number): Promise<boolean> {
+interface HealthCheckResult {
+  healthy: boolean;
+  detail: string;
+}
+
+function getPreloadPath(): string {
+  return path.join(__dirname, "preload.js");
+}
+
+function getFallbackPath(): string {
+  return path.join(__dirname, "fallback.html");
+}
+
+async function checkHealth(healthUrl: string, timeoutMs: number): Promise<HealthCheckResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const res = await fetch(healthUrl, { signal: controller.signal });
-    return res.ok;
-  } catch {
-    return false;
+    const response = await fetch(healthUrl, { signal: controller.signal });
+    return {
+      healthy: response.ok,
+      detail: response.ok
+        ? `Health endpoint responded ${response.status}.`
+        : `Health endpoint returned ${response.status}.`,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return {
+        healthy: false,
+        detail: `Health check timed out after ${timeoutMs}ms.`,
+      };
+    }
+
+    return {
+      healthy: false,
+      detail: error instanceof Error ? error.message : "Health check failed.",
+    };
   } finally {
     clearTimeout(timer);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Window creation
-// ---------------------------------------------------------------------------
+function setLatestConnection(
+  source: DesktopConnectionSnapshot["source"],
+  result: HealthCheckResult,
+): void {
+  latestConnection = {
+    healthy: result.healthy,
+    checkedAt: new Date().toISOString(),
+    source,
+    detail: result.detail,
+  };
 
-function createWindow(appUrl: string, healthUrl: string): void {
+  logger.info("Connection check completed", {
+    source,
+    healthy: result.healthy,
+    detail: result.detail,
+  });
+}
+
+function createWebPreferences(): Electron.BrowserWindowConstructorOptions["webPreferences"] {
+  return {
+    preload: getPreloadPath(),
+    contextIsolation: true,
+    nodeIntegration: false,
+    webSecurity: true,
+    sandbox: true,
+  };
+}
+
+function installExternalNavigationGuards(window: BrowserWindow, appUrl: string): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https:") || url.startsWith("http:") || url.startsWith("mailto:")) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    if (url.startsWith("file:")) {
+      return;
+    }
+
+    const parsed = new URL(url);
+    const allowed = new URL(appUrl);
+    if (parsed.origin !== allowed.origin) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
+  });
+}
+
+function createWindow(): void {
   const userDataPath = app.getPath("userData");
   const persistedState = loadWindowState(userDataPath);
 
@@ -49,42 +147,19 @@ function createWindow(appUrl: string, healthUrl: string): void {
     minHeight: 600,
     title: "MailMind",
     show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: true,
-      sandbox: true,
-    },
+    webPreferences: createWebPreferences(),
   });
 
-  // External links → system browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (
-      url.startsWith("https:") ||
-      url.startsWith("http:") ||
-      url.startsWith("mailto:")
-    ) {
-      shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
+  installExternalNavigationGuards(mainWindow, desktopConfig.appUrl);
 
-  // Block insecure navigation
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    const parsed = new URL(url);
-    const allowed = new URL(appUrl);
-    if (parsed.origin !== allowed.origin) {
-      event.preventDefault();
-    }
-  });
-
-  // Show when ready
   mainWindow.once("ready-to-show", () => {
     if (persistedState.isMaximized) {
       mainWindow?.maximize();
     }
-    mainWindow?.show();
+
+    if (desktopConfig.showWindowOnStartup) {
+      mainWindow?.show();
+    }
   });
 
   mainWindow.on("resize", () => {
@@ -104,7 +179,10 @@ function createWindow(appUrl: string, healthUrl: string): void {
   });
 
   mainWindow.on("close", (event) => {
-    if (!shouldHideToTray(process.platform, forceQuit)) {
+    if (
+      !desktopConfig.minimizeToTray ||
+      !shouldHideToTray(process.platform, forceQuit)
+    ) {
       return;
     }
 
@@ -113,71 +191,129 @@ function createWindow(appUrl: string, healthUrl: string): void {
     showTrayHint();
   });
 
-  // Clean up on close
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
-  // Load app or fallback
-  loadApp(appUrl, healthUrl);
+  void loadApp("startup");
 }
 
-async function loadApp(appUrl: string, healthUrl: string): Promise<void> {
-  if (!mainWindow) return;
-
-  const healthy = await checkHealth(healthUrl, 5000);
-  notifyConnectionTransition(healthy);
-  if (healthy) {
-    mainWindow.loadURL(appUrl);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "fallback.html"));
+async function loadApp(
+  source: DesktopConnectionSnapshot["source"],
+): Promise<boolean> {
+  if (!mainWindow) {
+    return false;
   }
+
+  const healthResult = await checkHealth(desktopConfig.healthUrl, HEALTH_TIMEOUT_MS);
+
+  if (healthResult.healthy) {
+    try {
+      await mainWindow.loadURL(desktopConfig.appUrl);
+      setLatestConnection(source, healthResult);
+      notifyConnectionTransition(true);
+      return true;
+    } catch (error) {
+      const failedResult: HealthCheckResult = {
+        healthy: false,
+        detail:
+          error instanceof Error
+            ? `Web app failed to load: ${error.message}`
+            : "Web app failed to load.",
+      };
+      setLatestConnection(source, failedResult);
+      notifyConnectionTransition(false);
+      logger.warn("Web app load failed", {
+        appUrl: desktopConfig.appUrl,
+        detail: failedResult.detail,
+      });
+      await mainWindow.loadFile(getFallbackPath());
+      return false;
+    }
+  }
+
+  setLatestConnection(source, healthResult);
+  notifyConnectionTransition(false);
+  await mainWindow.loadFile(getFallbackPath());
+  return false;
 }
 
-// ---------------------------------------------------------------------------
-// IPC handlers
-// ---------------------------------------------------------------------------
+function buildDiagnosticsSnapshot() {
+  return buildDesktopDiagnostics({
+    appName: APP_NAME,
+    appVersion: APP_VERSION,
+    platform: process.platform,
+    config: desktopConfig,
+    latestConnection,
+    logDirectory: logger.logDirectory,
+  });
+}
 
-function registerIpcHandlers(appUrl: string, healthUrl: string): void {
+function registerIpcHandlers(): void {
   ipcMain.handle("get-app-info", () => ({
     name: APP_NAME,
     version: APP_VERSION,
     platform: process.platform,
   }));
 
-  ipcMain.handle("get-config", () => ({
-    appUrl,
-    healthUrl,
-  }));
+  ipcMain.handle("desktop:get-config", () => desktopConfig);
+
+  ipcMain.handle("desktop:save-config", (_event, input: DesktopSettings) => {
+    const saved = saveDesktopConfig(app.getPath("userData"), input);
+    desktopConfig = {
+      ...desktopConfig,
+      ...saved,
+    };
+    buildMenu();
+    buildTray();
+    logger.info("Desktop config updated", {
+      appUrl: saved.appUrl,
+      healthUrl: saved.healthUrl,
+      minimizeToTray: saved.minimizeToTray,
+      showWindowOnStartup: saved.showWindowOnStartup,
+      notificationsEnabled: saved.notificationsEnabled,
+    });
+    return desktopConfig;
+  });
+
+  ipcMain.handle("desktop:get-diagnostics", () => buildDiagnosticsSnapshot());
 
   ipcMain.handle("retry-connection", async () => {
-    if (!mainWindow) return false;
-    const healthy = await checkHealth(healthUrl, 5000);
-    if (healthy) {
-      notifyConnectionTransition(true);
-      mainWindow.loadURL(appUrl);
-      return true;
-    }
-    notifyConnectionTransition(false);
-    return false;
+    const healthy = await loadApp("retry");
+    return healthy;
   });
 
   ipcMain.handle("open-external", (_event, url: string) => {
-    if (
-      url.startsWith("https:") ||
-      url.startsWith("http:") ||
-      url.startsWith("mailto:")
-    ) {
-      shell.openExternal(url);
+    if (url.startsWith("https:") || url.startsWith("http:") || url.startsWith("mailto:")) {
+      return shell.openExternal(url);
     }
+
+    throw new Error("Only http, https, and mailto links are allowed.");
+  });
+
+  ipcMain.handle("desktop:open-settings-window", async () => {
+    await openDesktopSettingsWindow({
+      appUrl: desktopConfig.appUrl,
+      fallbackFilePath: getFallbackPath(),
+      preloadPath: getPreloadPath(),
+    });
+  });
+
+  ipcMain.handle("desktop:open-logs", async () => {
+    const result = await shell.openPath(logger.logDirectory);
+    if (result) {
+      throw new Error(result);
+    }
+  });
+
+  ipcMain.handle("desktop:copy-diagnostics", async () => {
+    const text = formatDesktopDiagnosticsText(buildDiagnosticsSnapshot());
+    clipboard.writeText(text);
+    return text;
   });
 }
 
-// ---------------------------------------------------------------------------
-// Application menu
-// ---------------------------------------------------------------------------
-
-function buildMenu(appUrl: string): void {
+function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: "File",
@@ -192,8 +328,25 @@ function buildMenu(appUrl: string): void {
         },
         { type: "separator" },
         {
+          label: "Desktop Settings",
+          click: () => {
+            void openDesktopSettingsWindow({
+              appUrl: desktopConfig.appUrl,
+              fallbackFilePath: getFallbackPath(),
+              preloadPath: getPreloadPath(),
+            });
+          },
+        },
+        {
+          label: "Open Logs",
+          click: () => {
+            void shell.openPath(logger.logDirectory);
+          },
+        },
+        { type: "separator" },
+        {
           label: "Open Web App",
-          click: () => shell.openExternal(appUrl),
+          click: () => shell.openExternal(desktopConfig.appUrl),
         },
         { type: "separator" },
         { role: "quit" },
@@ -257,15 +410,22 @@ function buildMenu(appUrl: string): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function buildTray(appUrl: string): void {
-  if (tray) {
-    return;
-  }
-
+function buildTray(): void {
   const iconPath = path.join(__dirname, "..", "assets", "icon.png");
   const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon);
-  tray.setToolTip(TRAY_TOOLTIP);
+
+  if (tray === null) {
+    tray = new Tray(icon);
+    tray.setToolTip(TRAY_TOOLTIP);
+    tray.on("click", () => {
+      if (mainWindow?.isVisible()) {
+        mainWindow.hide();
+      } else {
+        showMainWindow();
+      }
+    });
+  }
+
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -273,8 +433,24 @@ function buildTray(appUrl: string): void {
         click: () => showMainWindow(),
       },
       {
+        label: "Desktop Settings",
+        click: () => {
+          void openDesktopSettingsWindow({
+            appUrl: desktopConfig.appUrl,
+            fallbackFilePath: getFallbackPath(),
+            preloadPath: getPreloadPath(),
+          });
+        },
+      },
+      {
+        label: "Open Logs",
+        click: () => {
+          void shell.openPath(logger.logDirectory);
+        },
+      },
+      {
         label: "Open Web App",
-        click: () => shell.openExternal(appUrl),
+        click: () => shell.openExternal(desktopConfig.appUrl),
       },
       {
         label: "Quit",
@@ -285,13 +461,6 @@ function buildTray(appUrl: string): void {
       },
     ]),
   );
-  tray.on("click", () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.hide();
-    } else {
-      showMainWindow();
-    }
-  });
 }
 
 function showMainWindow(): void {
@@ -325,7 +494,7 @@ function persistWindowState(): void {
 }
 
 function showNotification(title: string, body: string): void {
-  if (!Notification.isSupported()) {
+  if (!desktopConfig.notificationsEnabled || !Notification.isSupported()) {
     return;
   }
 
@@ -350,22 +519,22 @@ function notifyConnectionTransition(healthy: boolean): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// App lifecycle
-// ---------------------------------------------------------------------------
+app.whenReady().then(() => {
+  desktopConfig = loadConfig();
+  logger = createDesktopLogger(app.getPath("userData"));
+  logger.info("Desktop app starting", {
+    version: APP_VERSION,
+    platform: process.platform,
+  });
 
-app.whenReady().then(async () => {
-  const config = loadConfig();
+  buildMenu();
+  registerIpcHandlers();
+  buildTray();
+  createWindow();
 
-  buildMenu(config.appUrl);
-  registerIpcHandlers(config.appUrl, config.healthUrl);
-  buildTray(config.appUrl);
-  createWindow(config.appUrl, config.healthUrl);
-
-  // macOS: re-create window when dock icon clicked
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(config.appUrl, config.healthUrl);
+      createWindow();
     } else {
       showMainWindow();
     }
@@ -382,7 +551,6 @@ app.on("before-quit", () => {
   forceQuit = true;
 });
 
-// Security: prevent new WebContents creation
 app.on("web-contents-created", (_event, contents) => {
   contents.on("will-attach-webview", (event) => {
     event.preventDefault();

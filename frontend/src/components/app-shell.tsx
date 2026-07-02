@@ -15,8 +15,9 @@ interface NavLink {
     | "nav.dashboard"
     | "nav.emails"
     | "nav.actions"
-    | "nav.mailboxes";
-  icon: "dashboard" | "emails" | "actions" | "mailboxes";
+    | "nav.mailboxes"
+    | "nav.desktop";
+  icon: "dashboard" | "emails" | "actions" | "mailboxes" | "desktop";
 }
 
 const PRIMARY_NAV: NavLink[] = [
@@ -27,6 +28,7 @@ const PRIMARY_NAV: NavLink[] = [
 
 const SETTINGS_NAV: NavLink[] = [
   { href: "/settings/mailboxes", labelKey: "nav.mailboxes", icon: "mailboxes" },
+  { href: "/settings/desktop", labelKey: "nav.desktop", icon: "desktop" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -106,6 +108,13 @@ function NavIcon({ icon }: { icon: NavLink["icon"] }) {
         <path d="M4 8h16v9H4z" />
         <path d="M8 8V6h8v2" />
         <path d="M4 12h16" />
+      </>
+    ),
+    desktop: (
+      <>
+        <rect x="4" y="5" width="16" height="11" rx="1.5" />
+        <path d="M10 19h4" />
+        <path d="M8 16.5h8" />
       </>
     ),
   };

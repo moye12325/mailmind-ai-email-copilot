@@ -9,6 +9,7 @@
 :root {
   --bg: #0f1117;
   --surface: #1a1d27;
+  --surface-2: #131722;
   --border: #2a2d3a;
   --text: #e4e4e7;
   --text-muted: #a1a1aa;
@@ -37,17 +38,17 @@ html, body {
 }
 
 .card {
-  max-width: 560px;
+  max-width: 760px;
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 48px 40px;
-  text-align: center;
+  padding: 40px;
 }
 
 .logo {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  text-align: center;
 }
 
 .logo svg {
@@ -58,18 +59,86 @@ h1 {
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 8px;
-  letter-spacing: -0.02em;
+  text-align: center;
 }
 
 .subtitle {
   color: var(--text-muted);
   font-size: 15px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.diagnostics-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 24px;
+}
+
+.diagnostics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.diagnostics-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 98px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #2b2f3d;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-chip--ok {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+}
+
+.status-chip--warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+}
+
+.diagnostics-list {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnostics-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.diagnostics-row dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.diagnostics-row dd {
+  min-width: 0;
+  font-size: 13px;
+  word-break: break-word;
 }
 
 .instructions {
   text-align: left;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .instructions-title {
@@ -136,8 +205,8 @@ h1 {
 }
 
 .actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -147,7 +216,8 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 20px;
+  min-height: 44px;
+  padding: 12px 16px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -184,4 +254,14 @@ h1 {
   font-size: 13px;
   color: var(--text-muted);
   min-height: 20px;
+}
+
+@media (max-width: 720px) {
+  .card {
+    padding: 24px;
+  }
+
+  .diagnostics-row {
+    grid-template-columns: 1fr;
+  }
 }
